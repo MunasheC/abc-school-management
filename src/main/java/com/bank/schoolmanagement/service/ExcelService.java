@@ -12,7 +12,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -75,21 +74,37 @@ public class ExcelService {
     private final StudentFeeRecordService feeRecordService;
 
     /**
+     * Helper class to hold parsed student data before saving
+     */
+    private static class ParsedStudentData {
+        Student student;
+        StudentFeeRecord feeRecord;
+        
+        ParsedStudentData(Student student, StudentFeeRecord feeRecord) {
+            this.student = student;
+            this.feeRecord = feeRecord;
+        }
+    }
+
+    /**
      * Main method to process uploaded Excel file
      * 
      * PROCESS:
      * 1. Validate file is not empty and is Excel format
      * 2. Open Excel file using Apache POI
      * 3. Read each row and convert to Student object
-     * 4. Try to save each student
+     * 4. Try to save each student (each in its own transaction)
      * 5. Track successes and failures
      * 6. Return summary report
+     * 
+     * NOTE: @Transactional removed to allow partial success.
+     * Each student is saved in its own transaction via studentService.createStudent().
+     * This prevents failed students from rolling back successful ones.
      * 
      * @param file - The uploaded Excel file from the HTTP request
      * @return UploadSummary - Report of successes and failures
      * @throws IOException - If file cannot be read
      */
-    @Transactional  // All successful saves are committed together
     public UploadSummary processExcelFile(MultipartFile file) throws IOException {
         log.info("Processing Excel file: {}", file.getOriginalFilename());
         
@@ -125,27 +140,41 @@ public class ExcelService {
                     continue;
                 }
                 
+                String firstName = null;
+                String lastName = null;
+                
                 try {
-                    // Parse row into Student object
-                    Student student = parseRowToStudent(row);
+                    // Parse row into Student object (does NOT save yet)
+                    ParsedStudentData parsedData = parseRowToStudentData(row);
+                    firstName = parsedData.student.getFirstName();
+                    lastName = parsedData.student.getLastName();
                     
-                    // Validate and save student
-                    studentService.createStudent(student);
+                    // Save student
+                    Student savedStudent = studentService.createStudent(parsedData.student);
+                    log.debug("Row {}: Student saved - {} {}", i + 1, firstName, lastName);
+                    
+                    // Save fee record if financial data provided
+                    if (parsedData.feeRecord != null) {
+                        parsedData.feeRecord.setStudent(savedStudent);
+                        feeRecordService.createFeeRecord(parsedData.feeRecord);
+                        log.debug("Row {}: Fee record saved for {} {}", i + 1, firstName, lastName);
+                    }
                     
                     // Success!
                     successCount++;
-                    log.debug("Row {}: Successfully imported {} {}", 
-                        i + 1, student.getFirstName(), student.getLastName());
-                    
-                    // Optionally add to results (for now, only adding failures)
-                    // results.add(new StudentUploadResult(i + 1, student.getFirstName(), 
-                    //     student.getLastName(), true));
+                    log.debug("Row {}: Successfully imported {} {}", i + 1, firstName, lastName);
                     
                 } catch (Exception e) {
                     // Failure - record the error but continue processing
                     failureCount++;
-                    String firstName = getCellValueAsString(row.getCell(1));
-                    String lastName = getCellValueAsString(row.getCell(2));
+                    
+                    // Get names from row if not already extracted
+                    if (firstName == null) {
+                        firstName = getCellValueAsString(row.getCell(1));
+                    }
+                    if (lastName == null) {
+                        lastName = getCellValueAsString(row.getCell(2));
+                    }
                     
                     log.warn("Row {}: Failed to import {} {} - {}", 
                         i + 1, firstName, lastName, e.getMessage());
@@ -171,13 +200,16 @@ public class ExcelService {
     }
 
     /**
-     * Parse one Excel row into Student + Guardian + StudentFeeRecord (REFACTORED)
+     * Parse one Excel row into Student + Guardian + StudentFeeRecord (REFACTORED v2)
+     * 
+     * IMPORTANT: This method ONLY PARSES data, it does NOT save to database.
+     * Saving is handled separately in processExcelFile() for proper error tracking.
      * 
      * LEARNING: Creating related entities together
-     * This method now creates 3 entities from one Excel row:
+     * This method creates 3 entities from one Excel row:
      * 1. Guardian (parent/guardian) - checks if exists by phone first (siblings share guardian)
-     * 2. Student (personal/academic info)
-     * 3. StudentFeeRecord (financial info) - if any fee data provided
+     * 2. Student (personal/academic info) - NOT saved yet
+     * 3. StudentFeeRecord (financial info) - only created if fee data provided, NOT saved yet
      * 
      * EXCEL COLUMN MAPPING (0-indexed):
      * BASIC INFO:
@@ -205,9 +237,9 @@ public class ExcelService {
      * 19: Bursar Notes
      * 
      * @param row - Excel row to parse
-     * @return Student object with guardian and fee record relationships
+     * @return ParsedStudentData containing student and optional fee record (not yet saved)
      */
-    private Student parseRowToStudent(Row row) {
+    private ParsedStudentData parseRowToStudentData(Row row) {
         /* ----------------------  CREATE GUARDIAN  ------------------------- */
         
         Guardian guardian = new Guardian();
@@ -282,11 +314,9 @@ public class ExcelService {
             student.setSchool(currentSchool);
         }
         
-        // Save student first so we have the ID for fee record
-        Student savedStudent = studentService.createStudent(student);
-        log.debug("Student created: {} {}, ID: {}", savedStudent.getFirstName(), savedStudent.getLastName(), savedStudent.getId());
+        /* ----------------------  CREATE STUDENT FEE RECORD (IF NEEDED)  ------------------------- */
         
-        /* ----------------------  CREATE STUDENT FEE RECORD  ------------------------- */
+        StudentFeeRecord feeRecord = null;
         
         // Check if any financial data is provided
         BigDecimal tuitionFee = getCellValueAsBigDecimal(row.getCell(10));
@@ -300,10 +330,9 @@ public class ExcelService {
                                    (examFee != null && examFee.compareTo(BigDecimal.ZERO) > 0);
         
         if (hasFinancialData) {
-            StudentFeeRecord feeRecord = new StudentFeeRecord();
+            feeRecord = new StudentFeeRecord();
             
-            // Link to student
-            feeRecord.setStudent(savedStudent);
+            // Note: Student will be linked later after it's saved
             
             // Assign school from current context (multi-tenant)
             if (currentSchool != null) {
@@ -348,13 +377,10 @@ public class ExcelService {
             feeRecord.setBursarNotes(getCellValueAsString(row.getCell(19)));
             
             feeRecord.setIsActive(true);
-            
-            // Save fee record - calculateTotals() will be called automatically by @PrePersist
-            StudentFeeRecord savedFeeRecord = feeRecordService.createFeeRecord(feeRecord);
-            log.debug("Fee record created for student: {}, Outstanding: {}", savedStudent.getFirstName(), savedFeeRecord.getOutstandingBalance());
         }
         
-        return savedStudent;
+        // Return both student and optional fee record (neither saved yet)
+        return new ParsedStudentData(student, feeRecord);
     }
 
     /**

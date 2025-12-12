@@ -8,6 +8,9 @@ import com.bank.schoolmanagement.entity.Student;
 import com.bank.schoolmanagement.repository.StudentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -423,11 +426,13 @@ public class StudentService {
      * - Uses SchoolContext to get current school
      * - Returns only students from current school
      * - School users automatically see only their students
+     * @param pageable 
      */
-    public List<Student> getAllStudentsForCurrentSchool() {
+    public Page<Student> getAllStudentsForCurrentSchool(Pageable pageable) {
         School currentSchool = SchoolContext.getCurrentSchool();
         log.debug("Fetching all students for school: {}", currentSchool.getSchoolName());
-        return studentRepository.findBySchool(currentSchool);
+        Page<Student> students = studentRepository.findBySchool(currentSchool, pageable);
+        return students;
     }
 
     /**

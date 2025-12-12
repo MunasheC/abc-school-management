@@ -1,0 +1,6 @@
+Student ID,First Name,Last Name,Date of Birth,Grade,Parent Name,Parent Phone,Parent Email,Address,Fee Category,Tuition Fee,Boarding Fee,Development Levy,Exam Fee,Previous Balance,Amount Paid,Has Scholarship,Scholarship Amount,Sibling Discount,Bursar Notes
+STU2001,Tafadzwa,Munyuki,2018-03-15,GRADE_1,Joseph Munyuki,+263771234001,joseph.munyuki@email.com,12 Greendale Avenue Harare,DAY_SCHOLAR,450.00,0.00,50.00,30.00,0.00,0.00,NO,0.00,0.00,New enrollment
+STU2002,Rudo,Madziva,2016-08-22,GRADE_3,Grace Madziva,+263772345002,grace.madziva@email.com,45 Borrowdale Road Harare,DAY_SCHOLAR,450.00,0.00,50.00,30.00,0.00,200.00,YES,100.00,0.00,Partial payment received
+STU2003,Tendai,Nyathi,2013-01-10,GRADE_7,Peter Nyathi,+263773456003,peter.nyathi@email.com,78 Mount Pleasant Harare,BOARDER,450.00,650.00,50.00,40.00,0.00,0.00,NO,0.00,0.00,New boarder
+,Farai,Chikwanha,2017-06-20,GRADE_2,Sarah Chikwanha,+263774567004,sarah.chikwanha@email.com,23 Highlands Harare,DAY_SCHOLAR,450.00,0.00,50.00,30.00,0.00,530.00,NO,0.00,25.00,Full payment - sibling discount applied
+,Tapiwa,Chikwanha,2015-11-05,GRADE_4,Sarah Chikwanha,+263774567004,sarah.chikwanha@email.com,23 Highlands Harare,DAY_SCHOLAR,450.00,0.00,50.00,30.00,0.00,505.00,NO,0.00,25.00,Sibling of Farai - full payment

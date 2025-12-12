@@ -22,11 +22,14 @@ A Spring Boot application for managing school student data, designed as a partne
 
 ### Excel Upload 📤
 - ✅ Bulk import students from Excel files (.xlsx, .xls)
-- ✅ Support for 20 columns including all bursar fields
-- ✅ Automatic validation and error reporting
+- ✅ Support for 20 columns including student info, guardian info, and fees
+- ✅ Multi-tenant support via X-School-ID header
+- ✅ Automatic sibling detection (shared guardians via phone number)
+- ✅ Auto-generates Student IDs if not provided
+- ✅ Creates fee records automatically if fee data included
+- ✅ Automatic validation and detailed error reporting
 - ✅ Handles partial uploads (continues on errors)
 - ✅ Detailed upload summary with success/failure counts
-- ✅ Auto-generates Student IDs and calculates balances
 
 ### Bank Integration Ready 🏦
 - ✅ RESTful API for mobile apps and internet banking
@@ -57,9 +60,10 @@ A Spring Boot application for managing school student data, designed as a partne
 3. Access at: `http://localhost:8080`
 
 ### Testing the API
-- See [TESTING_GUIDE.md](TESTING_GUIDE.md) for basic endpoint testing
-- See [EXCEL_UPLOAD_GUIDE.md](EXCEL_UPLOAD_GUIDE.md) for Excel upload feature
-- See [BURSAR_API_GUIDE.md](BURSAR_API_GUIDE.md) for financial management endpoints
+- See [API-DOCUMENTATION.md](API-DOCUMENTATION.md) for complete API reference (all endpoints)
+- See [STUDENT-ENROLLMENT-GUIDE.md](STUDENT-ENROLLMENT-GUIDE.md) for student enrollment overview
+- See [BULK-UPLOAD-QUICK-START.md](BULK-UPLOAD-QUICK-START.md) for Excel bulk upload quick reference
+- See [BULK-UPLOAD-GUIDE.md](BULK-UPLOAD-GUIDE.md) for detailed Excel upload documentation
 
 ### Quick Start: Create Sample Data
 ```powershell
@@ -94,11 +98,12 @@ A Spring Boot application for managing school student data, designed as a partne
 ### Bulk Operations
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/students/upload-excel` | POST | Bulk import from Excel |
+| `/api/school/students/upload-excel` | POST | Bulk import from Excel (requires X-School-ID header) |
 
 **See detailed documentation:**
-- [TESTING_GUIDE.md](TESTING_GUIDE.md) - Complete endpoint reference
-- [BURSAR_API_GUIDE.md](BURSAR_API_GUIDE.md) - Financial management endpoints
+- [API-DOCUMENTATION.md](API-DOCUMENTATION.md) - Complete API reference with all endpoints
+- [STUDENT-ENROLLMENT-GUIDE.md](STUDENT-ENROLLMENT-GUIDE.md) - Overview of enrollment methods
+- [BULK-UPLOAD-GUIDE.md](BULK-UPLOAD-GUIDE.md) - Comprehensive bulk upload guide
 
 ## 📖 Learning Resources
 This project is built as a learning exercise to understand:

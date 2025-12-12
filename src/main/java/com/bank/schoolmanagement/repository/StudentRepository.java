@@ -1,6 +1,9 @@
 package com.bank.schoolmanagement.repository;
 
 import com.bank.schoolmanagement.entity.Student;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -92,6 +95,14 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
      * Spring generates: SELECT * FROM students WHERE first_name = ? AND last_name = ?
      */
     List<Student> findByFirstNameAndLastName(String firstName, String lastName);
+    
+    /**
+     * Find students by first name, last name, school ID, and grade
+     * Used for bank search when parent doesn't know student reference
+     * Spring generates: SELECT * FROM students WHERE first_name = ? AND last_name = ? AND school_id = ? AND grade = ?
+     */
+    List<Student> findByFirstNameIgnoreCaseAndLastNameIgnoreCaseAndSchoolIdAndGrade(
+        String firstName, String lastName, Long schoolId, String grade);
 
     /**
      * Find active students only
@@ -212,8 +223,9 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
      * - Used by school users to view their students
      * 
      * Spring generates: SELECT * FROM students WHERE school_id = ?
+     * @param pageable 
      */
-    List<Student> findBySchool(com.bank.schoolmanagement.entity.School school);
+    Page<Student> findBySchool(com.bank.schoolmanagement.entity.School school, Pageable pageable);
 
     /**
      * Find student by school and student ID

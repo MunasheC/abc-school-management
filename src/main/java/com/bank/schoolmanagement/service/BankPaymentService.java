@@ -1,5 +1,7 @@
 package com.bank.schoolmanagement.service;
 
+import com.bank.schoolmanagement.dto.StudentLookupResponse;
+import com.bank.schoolmanagement.dto.StudentSearchRequest;
 import com.bank.schoolmanagement.entity.Payment;
 import com.bank.schoolmanagement.entity.School;
 import com.bank.schoolmanagement.entity.Student;
@@ -11,11 +13,13 @@ import com.bank.schoolmanagement.repository.StudentFeeRecordRepository;
 import com.bank.schoolmanagement.repository.StudentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.regex.Matcher;
@@ -71,9 +75,9 @@ public class BankPaymentService {
      * 5. Return student with fee details
      * 
      * @param studentReference Format: "SCH001-STU-001"
-     * @return StudentLookupResult with student, school, and fee information
+     * @return StudentLookupResponse with student, school, and fee information
      */
-    public StudentLookupResult lookupStudentByReference(String studentReference) {
+    public StudentLookupResponse lookupStudentByReference(String studentReference) {
         log.info("Bank teller looking up student by reference: {}", studentReference);
         
         // Validate format
@@ -129,6 +133,95 @@ public class BankPaymentService {
         // Get fee record (optional)
         Optional<StudentFeeRecord> feeRecordOpt = feeRecordRepository.findByStudentId(student.getId());
         
+        // Build DTO response (no circular references)
+        StudentLookupResponse response = new StudentLookupResponse();
+        response.setStudentId(student.getStudentId());
+        response.setStudentName(student.getFirstName() + " " + student.getLastName());
+        response.setGrade(student.getGrade());
+        response.setClassName(student.getClassName());
+        
+        response.setSchoolCode(school.getSchoolCode());
+        response.setSchoolName(school.getSchoolName());
+        
+        if (feeRecordOpt.isPresent()) {
+            StudentFeeRecord feeRecord = feeRecordOpt.get();
+            response.setFeeCategory(feeRecord.getFeeCategory());
+            response.setTotalFees(feeRecord.getNetAmount());
+            response.setAmountPaid(feeRecord.getAmountPaid());
+            response.setOutstandingBalance(feeRecord.getOutstandingBalance());
+            response.setPaymentStatus(feeRecord.getPaymentStatus());
+        } else {
+            response.setFeeCategory("N/A");
+            response.setTotalFees(BigDecimal.ZERO);
+            response.setAmountPaid(BigDecimal.ZERO);
+            response.setOutstandingBalance(BigDecimal.ZERO);
+            response.setPaymentStatus("NO_RECORD");
+        }
+        
+        log.info("Student lookup successful: {} from {}, Outstanding: {}", 
+                 response.getStudentName(), school.getSchoolName(), response.getOutstandingBalance());
+        
+        return response;
+    }
+    
+    /**
+     * Internal method: Get student entities for payment processing
+     * Used by payment methods that need actual entities to create Payment records
+     * @param studentReference Format: "SCH001-STU-001"
+     * @return StudentLookupResult with entities
+     */
+    private StudentLookupResult lookupStudentEntitiesInternal(String studentReference) {
+        log.debug("Looking up student entities for payment: {}", studentReference);
+        
+        // Validate format
+        if (studentReference == null || studentReference.isBlank()) {
+            throw new IllegalArgumentException("Student reference cannot be empty");
+        }
+        
+        // Parse reference
+        String schoolCode;
+        String studentId;
+        
+        if (studentReference.contains("-")) {
+            Pattern pattern = Pattern.compile("^([A-Z0-9]+)-(.+)$");
+            Matcher matcher = pattern.matcher(studentReference);
+            
+            if (!matcher.matches()) {
+                log.error("Invalid student reference format: {}", studentReference);
+                throw new IllegalArgumentException(
+                    "Invalid student reference format. Expected format: SCH001-STU001 or SCHOOLCODE-STUDENTID");
+            }
+            
+            schoolCode = matcher.group(1);
+            studentId = matcher.group(2);
+        } else {
+            throw new IllegalArgumentException("Reference must include school code: SCHOOLCODE-STUDENTID");
+        }
+        
+        // Find school by code
+        School school = schoolRepository.findBySchoolCode(schoolCode)
+                .orElseThrow(() -> {
+                    log.error("School not found with code: {}", schoolCode);
+                    return new IllegalArgumentException("School not found: " + schoolCode);
+                });
+        
+        // Find student by student ID and school
+        Student student = studentRepository.findBySchoolIdAndStudentId(school.getId(), studentId)
+                .orElseThrow(() -> {
+                    log.error("Student not found with ID: {} in school: {}", studentId, schoolCode);
+                    return new IllegalArgumentException("Student not found: " + studentId + " in school " + schoolCode);
+                });
+        
+        // Validate student belongs to the school
+        if (!student.getSchool().getId().equals(school.getId())) {
+            log.error("Student {} does not belong to school {}", studentReference, schoolCode);
+            throw new IllegalArgumentException("Student does not belong to school " + schoolCode);
+        }
+        
+        // Get fee record (optional)
+        Optional<StudentFeeRecord> feeRecordOpt = feeRecordRepository.findByStudentId(student.getId());
+        
+        // Build entity result
         StudentLookupResult result = new StudentLookupResult();
         result.setStudent(student);
         result.setSchool(school);
@@ -136,19 +229,117 @@ public class BankPaymentService {
         
         if (feeRecordOpt.isPresent()) {
             StudentFeeRecord feeRecord = feeRecordOpt.get();
-            result.setOutstandingBalance(feeRecord.getOutstandingBalance());
             result.setTotalFees(feeRecord.getNetAmount());
             result.setAmountPaid(feeRecord.getAmountPaid());
+            result.setOutstandingBalance(feeRecord.getOutstandingBalance());
         } else {
-            result.setOutstandingBalance(BigDecimal.ZERO);
             result.setTotalFees(BigDecimal.ZERO);
             result.setAmountPaid(BigDecimal.ZERO);
+            result.setOutstandingBalance(BigDecimal.ZERO);
         }
         
-        log.info("Student lookup successful: {} from {}, Outstanding: {}", 
-                 student.getFullName(), school.getSchoolName(), result.getOutstandingBalance());
-        
         return result;
+    }
+
+    /**
+     * Search students by name, school, and grade (for parents without reference codes)
+     * 
+     * LEARNING: Real-world scenario - many parents don't have reference codes
+     * - They only know: child's name, school name, grade
+     * - Bank teller needs to search by these natural identifiers
+     * - Multiple matches possible (common names)
+     * 
+     * Process:
+     * 1. Search schools by name (case-insensitive, partial match)
+     * 2. For each matching school, search students by first name, last name, grade
+     * 3. Get fee records for matched students
+     * 4. Return list of all matches (could be 0, 1, or multiple)
+     * 
+     * @param request StudentSearchRequest with firstName, lastName, schoolName, grade
+     * @return List of StudentLookupResponse - empty if no matches
+     */
+    public List<StudentLookupResponse> searchStudentsByName(StudentSearchRequest request) {
+        log.info("Searching students - name: {}, school: {}, grade: {}", 
+                 request.getStudentName(), request.getSchoolName(), request.getGrade());
+        
+        List<StudentLookupResponse> results = new ArrayList<>();
+        
+        // Step 1: Find schools (all if no schoolName provided)
+        List<School> matchingSchools;
+        if (request.getSchoolName() != null && !request.getSchoolName().isBlank()) {
+            matchingSchools = schoolRepository.findBySchoolNameContainingIgnoreCase(request.getSchoolName());
+            if (matchingSchools.isEmpty()) {
+                log.warn("No schools found matching name: {}", request.getSchoolName());
+                return results; // Empty list
+            }
+            log.debug("Found {} schools matching '{}'", matchingSchools.size(), request.getSchoolName());
+        } else {
+            // No school filter - search all schools
+            matchingSchools = schoolRepository.findAll();
+            log.debug("Searching across all {} schools", matchingSchools.size());
+        }
+        
+        // Step 2: For each school, search for students matching criteria
+        for (School school : matchingSchools) {
+            // Get all students in this school (unpaged for search functionality)
+            List<Student> schoolStudents = studentRepository.findBySchool(school, Pageable.unpaged()).getContent();
+            
+            // Filter by studentName if provided (searches both first and last name)
+            if (request.getStudentName() != null && !request.getStudentName().isBlank()) {
+                String name = request.getStudentName().toLowerCase();
+                schoolStudents = schoolStudents.stream()
+                    .filter(s -> s.getFirstName().toLowerCase().contains(name) 
+                              || s.getLastName().toLowerCase().contains(name))
+                    .toList();
+            }
+            
+            // Filter by grade if provided
+            if (request.getGrade() != null && !request.getGrade().isBlank()) {
+                String grade = request.getGrade();
+                schoolStudents = schoolStudents.stream()
+                    .filter(s -> s.getGrade().equals(grade))
+                    .toList();
+            }
+            
+            List<Student> matchingStudents = schoolStudents;
+            
+            log.debug("Found {} students matching name in school {}", matchingStudents.size(), school.getSchoolName());
+            
+            // Step 3: Build response DTOs for each match
+            for (Student student : matchingStudents) {
+                StudentLookupResponse response = new StudentLookupResponse();
+                response.setStudentId(student.getStudentId());
+                response.setStudentName(student.getFirstName() + " " + student.getLastName());
+                response.setGrade(student.getGrade());
+                response.setClassName(student.getClassName());
+                
+                response.setSchoolCode(school.getSchoolCode());
+                response.setSchoolName(school.getSchoolName());
+                
+                // Get fee record (optional)
+                Optional<StudentFeeRecord> feeRecordOpt = feeRecordRepository.findByStudentId(student.getId());
+                
+                if (feeRecordOpt.isPresent()) {
+                    StudentFeeRecord feeRecord = feeRecordOpt.get();
+                    response.setFeeCategory(feeRecord.getFeeCategory());
+                    response.setTotalFees(feeRecord.getNetAmount());
+                    response.setAmountPaid(feeRecord.getAmountPaid());
+                    response.setOutstandingBalance(feeRecord.getOutstandingBalance());
+                    response.setPaymentStatus(feeRecord.getPaymentStatus());
+                } else {
+                    response.setFeeCategory("N/A");
+                    response.setTotalFees(BigDecimal.ZERO);
+                    response.setAmountPaid(BigDecimal.ZERO);
+                    response.setOutstandingBalance(BigDecimal.ZERO);
+                    response.setPaymentStatus("NO_RECORD");
+                }
+                
+                results.add(response);
+            }
+        }
+        
+        log.info("Student search completed: {} match(es) found", results.size());
+        return results;
     }
 
     /**
@@ -172,8 +363,8 @@ public class BankPaymentService {
         log.info("Recording bank counter payment: {} for student {}", 
                  request.getAmount(), request.getStudentReference());
         
-        // Lookup student
-        StudentLookupResult lookup = lookupStudentByReference(request.getStudentReference());
+        // Lookup student entities
+        StudentLookupResult lookup = lookupStudentEntitiesInternal(request.getStudentReference());
         
         // Create payment
         Payment payment = new Payment();
@@ -235,8 +426,8 @@ public class BankPaymentService {
         log.info("Recording digital banking payment: {} for student {} via {}", 
                  request.getAmount(), request.getStudentReference(), request.getPaymentMethod());
         
-        // Lookup student
-        StudentLookupResult lookup = lookupStudentByReference(request.getStudentReference());
+        // Lookup student entities
+        StudentLookupResult lookup = lookupStudentEntitiesInternal(request.getStudentReference());
         
         // Create payment
         Payment payment = new Payment();

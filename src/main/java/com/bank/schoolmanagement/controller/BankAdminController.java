@@ -1,5 +1,6 @@
 package com.bank.schoolmanagement.controller;
 
+import com.bank.schoolmanagement.dto.SchoolUpdateRequest;
 import com.bank.schoolmanagement.entity.Payment;
 import com.bank.schoolmanagement.entity.School;
 import com.bank.schoolmanagement.entity.Student;
@@ -11,6 +12,8 @@ import com.bank.schoolmanagement.repository.StudentRepository;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -77,9 +80,9 @@ public class BankAdminController {
     }
 
     /**
-     * GET /api/bank/admin/schools/{id}
+     * GET /api/bank/admin/schools/code/{schoolCode}
      * 
-     * Get detailed information for a specific school.
+     * Get detailed information for a specific school by school code.
      * 
      * Includes:
      * - School details
@@ -88,12 +91,12 @@ public class BankAdminController {
      * - Payment method breakdown
      * - Recent payment activity
      */
-    @GetMapping("/schools/{id}")
-    public ResponseEntity<SchoolDetails> getSchoolDetails(@PathVariable Long id) {
-        log.info("Bank admin: Getting details for school ID: {}", id);
+    @GetMapping("/schools/code/{schoolCode}")
+    public ResponseEntity<SchoolDetails> getSchoolDetailsByCode(@PathVariable String schoolCode) {
+        log.info("Bank admin: Getting details for school code: {}", schoolCode);
         
-        School school = schoolRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("School not found with ID: " + id));
+        School school = schoolRepository.findBySchoolCode(schoolCode)
+                .orElseThrow(() -> new IllegalArgumentException("School not found with code: " + schoolCode));
         
         SchoolDetails details = new SchoolDetails();
         details.setSchool(school);
@@ -105,7 +108,7 @@ public class BankAdminController {
         details.setActiveStudents(activeStudents);
         
         // Get students by grade
-        List<Student> students = studentRepository.findBySchool(school);
+        List<Student> students = studentRepository.findBySchool(school, Pageable.unpaged()).getContent();
         Map<String, Long> studentsByGrade = students.stream()
                 .filter(s -> s.getGrade() != null)
                 .collect(Collectors.groupingBy(Student::getGrade, Collectors.counting()));
@@ -200,38 +203,108 @@ public class BankAdminController {
     }
 
     /**
-     * PUT /api/bank/admin/schools/{id}
+     * PUT /api/bank/admin/schools/code/{schoolCode}
      * 
-     * Update school information.
+     * Update school information by school code.
+     * Only include the fields you want to update in the request body.
      */
-    @PutMapping("/schools/{id}")
-    public ResponseEntity<School> updateSchool(@PathVariable Long id, @Valid @RequestBody School schoolUpdate) {
-        log.info("Bank admin: Updating school ID: {}", id);
+    @PutMapping("/schools/code/{schoolCode}")
+    public ResponseEntity<School> updateSchoolByCode(
+            @PathVariable String schoolCode, 
+            @RequestBody SchoolUpdateRequest updateRequest) {
+        log.info("Bank admin: Updating school with code: {}", schoolCode);
         
-        School school = schoolRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("School not found with ID: " + id));
+        School school = schoolRepository.findBySchoolCode(schoolCode)
+                .orElseThrow(() -> new IllegalArgumentException("School not found with code: " + schoolCode));
         
-        // Update fields
-        if (schoolUpdate.getSchoolName() != null) {
-            school.setSchoolName(schoolUpdate.getSchoolName());
+        // Update fields if provided
+        if (updateRequest.getSchoolName() != null) {
+            school.setSchoolName(updateRequest.getSchoolName());
         }
-        if (schoolUpdate.getHeadTeacherName() != null) {
-            school.setHeadTeacherName(schoolUpdate.getHeadTeacherName());
+        if (updateRequest.getSchoolType() != null) {
+            school.setSchoolType(updateRequest.getSchoolType());
         }
-        if (schoolUpdate.getPrimaryPhone() != null) {
-            school.setPrimaryPhone(schoolUpdate.getPrimaryPhone());
+        if (updateRequest.getAddress() != null) {
+            school.setAddress(updateRequest.getAddress());
         }
-        if (schoolUpdate.getEmail() != null) {
-            school.setEmail(schoolUpdate.getEmail());
+        if (updateRequest.getCity() != null) {
+            school.setCity(updateRequest.getCity());
         }
-        if (schoolUpdate.getAddress() != null) {
-            school.setAddress(schoolUpdate.getAddress());
+        if (updateRequest.getProvince() != null) {
+            school.setProvince(updateRequest.getProvince());
         }
-        if (schoolUpdate.getIsActive() != null) {
-            school.setIsActive(schoolUpdate.getIsActive());
+        if (updateRequest.getPostalCode() != null) {
+            school.setPostalCode(updateRequest.getPostalCode());
+        }
+        if (updateRequest.getCountry() != null) {
+            school.setCountry(updateRequest.getCountry());
+        }
+        if (updateRequest.getPrimaryPhone() != null) {
+            school.setPrimaryPhone(updateRequest.getPrimaryPhone());
+        }
+        if (updateRequest.getSecondaryPhone() != null) {
+            school.setSecondaryPhone(updateRequest.getSecondaryPhone());
+        }
+        if (updateRequest.getEmail() != null) {
+            school.setEmail(updateRequest.getEmail());
+        }
+        if (updateRequest.getWebsite() != null) {
+            school.setWebsite(updateRequest.getWebsite());
+        }
+        if (updateRequest.getHeadTeacherName() != null) {
+            school.setHeadTeacherName(updateRequest.getHeadTeacherName());
+        }
+        if (updateRequest.getBursarName() != null) {
+            school.setBursarName(updateRequest.getBursarName());
+        }
+        if (updateRequest.getBursarPhone() != null) {
+            school.setBursarPhone(updateRequest.getBursarPhone());
+        }
+        if (updateRequest.getBursarEmail() != null) {
+            school.setBursarEmail(updateRequest.getBursarEmail());
+        }
+        if (updateRequest.getMinistryRegistrationNumber() != null) {
+            school.setMinistryRegistrationNumber(updateRequest.getMinistryRegistrationNumber());
+        }
+        if (updateRequest.getZimsecCenterNumber() != null) {
+            school.setZimsecCenterNumber(updateRequest.getZimsecCenterNumber());
+        }
+        if (updateRequest.getBankAccountNumber() != null) {
+            school.setBankAccountNumber(updateRequest.getBankAccountNumber());
+        }
+        if (updateRequest.getBankBranch() != null) {
+            school.setBankBranch(updateRequest.getBankBranch());
+        }
+        if (updateRequest.getBankAccountName() != null) {
+            school.setBankAccountName(updateRequest.getBankAccountName());
+        }
+        if (updateRequest.getRelationshipManager() != null) {
+            school.setRelationshipManager(updateRequest.getRelationshipManager());
+        }
+        if (updateRequest.getRelationshipManagerPhone() != null) {
+            school.setRelationshipManagerPhone(updateRequest.getRelationshipManagerPhone());
+        }
+        if (updateRequest.getSubscriptionTier() != null) {
+            school.setSubscriptionTier(updateRequest.getSubscriptionTier());
+        }
+        if (updateRequest.getIsActive() != null) {
+            school.setIsActive(updateRequest.getIsActive());
+        }
+        if (updateRequest.getMaxStudents() != null) {
+            school.setMaxStudents(updateRequest.getMaxStudents());
+        }
+        if (updateRequest.getLogoUrl() != null) {
+            school.setLogoUrl(updateRequest.getLogoUrl());
+        }
+        if (updateRequest.getPrimaryColor() != null) {
+            school.setPrimaryColor(updateRequest.getPrimaryColor());
+        }
+        if (updateRequest.getNotes() != null) {
+            school.setNotes(updateRequest.getNotes());
         }
         
         School updatedSchool = schoolRepository.save(school);
+        log.info("School updated successfully: {}", schoolCode);
         return ResponseEntity.ok(updatedSchool);
     }
 

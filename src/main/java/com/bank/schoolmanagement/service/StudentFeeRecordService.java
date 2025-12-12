@@ -8,6 +8,8 @@ import com.bank.schoolmanagement.repository.StudentFeeRecordRepository;
 import com.bank.schoolmanagement.repository.StudentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -1098,7 +1100,7 @@ public class StudentFeeRecordService {
         School currentSchool = SchoolContext.getCurrentSchool();
         log.info("Assigning fees to ALL students in school: {}", currentSchool.getSchoolName());
         
-        List<Student> students = studentRepository.findBySchool(currentSchool);
+        List<Student> students = studentRepository.findBySchool(currentSchool, Pageable.unpaged()).getContent();
         log.info("Found {} students in school {}", students.size(), currentSchool.getSchoolName());
         
         return assignFeesToStudentList(students, currentSchool, termYear, feeCategory,

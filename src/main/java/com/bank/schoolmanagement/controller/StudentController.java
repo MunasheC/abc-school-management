@@ -9,9 +9,20 @@ import com.bank.schoolmanagement.service.ExcelService;
 import com.bank.schoolmanagement.service.PaymentService;
 import com.bank.schoolmanagement.service.StudentFeeRecordService;
 import com.bank.schoolmanagement.service.StudentService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -52,6 +63,8 @@ import java.util.List;
 @RequestMapping("/api/school/students")
 @RequiredArgsConstructor
 @Slf4j
+@Tag(name = "Student Management (School/Bursar)", description = "Endpoints for school administrators and bursars to manage student enrollment, records, and bulk operations. Requires X-School-ID header.")
+@SecurityRequirement(name = "X-School-ID")
 public class StudentController {
 
     private final StudentService studentService;
@@ -94,9 +107,9 @@ public class StudentController {
      * Returns JSON array of all students
      */
     @GetMapping
-    public ResponseEntity<List<Student>> getAllStudents() {
+    public ResponseEntity<Page<Student>> getAllStudents(Pageable pageable) {
         log.info("REST request to get all students");
-        List<Student> students = studentService.getAllStudentsForCurrentSchool();
+        Page<Student> students = studentService.getAllStudentsForCurrentSchool(pageable);
         return ResponseEntity.ok(students);
     }
 
@@ -595,8 +608,27 @@ public class StudentController {
      * @param file - The Excel file uploaded by the bursar
      * @return UploadSummary - Report of successes and failures
      */
+    @Operation(
+        summary = "Bulk enroll students via Excel upload",
+        description = "Upload an Excel file (.xlsx or .xls) to enroll multiple students at once. " +
+                     "The file must have specific columns (Student ID, First Name, Last Name, Parent Name, Parent Phone, etc.). " +
+                     "Returns a summary showing how many students were successfully enrolled and which ones failed with error details. " +
+                     "Supports partial success - valid students are saved even if some rows have errors. " +
+                     "Automatically detects siblings via shared parent phone numbers and creates fee records if fee data is included."
+    )
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "File processed successfully (check successCount vs failureCount in response)", 
+                    content = @Content(schema = @Schema(implementation = UploadSummary.class))),
+        @ApiResponse(responseCode = "400", description = "Invalid file format or empty file"),
+        @ApiResponse(responseCode = "500", description = "Error processing file")
+    })
     @PostMapping("/upload-excel")
-    public ResponseEntity<?> uploadExcelFile(@RequestParam("file") MultipartFile file) {
+    public ResponseEntity<?> uploadExcelFile(
+            @Parameter(description = "Excel file (.xlsx or .xls) containing student data. " +
+                                    "Required columns: First Name, Last Name, Parent Name, Parent Phone. " +
+                                    "See documentation for complete column list.", 
+                      required = true)
+            @RequestParam("file") MultipartFile file) {
         log.info("REST request to upload Excel file: {}", file.getOriginalFilename());
         
         try {

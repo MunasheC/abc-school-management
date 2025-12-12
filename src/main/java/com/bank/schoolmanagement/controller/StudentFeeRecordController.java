@@ -1,5 +1,6 @@
 package com.bank.schoolmanagement.controller;
 
+import com.bank.schoolmanagement.dto.StudentFeeRecordResponse;
 import com.bank.schoolmanagement.entity.StudentFeeRecord;
 import com.bank.schoolmanagement.service.StudentFeeRecordService;
 import jakarta.validation.Valid;
@@ -99,11 +100,61 @@ public class StudentFeeRecordController {
      * Example: GET /api/fee-records/student-ref/STU1733838975353
      */
     @GetMapping("/student-ref/{studentId}")
-    public ResponseEntity<StudentFeeRecord> getFeeRecordByStudentReference(@PathVariable String studentId) {
+    public ResponseEntity<StudentFeeRecordResponse> getFeeRecordByStudentReference(@PathVariable String studentId) {
         log.info("REST request to get fee record for student reference: {}", studentId);
         return feeRecordService.getFeeRecordByStudentReference(studentId)
+                .map(this::convertToDTO)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
+    }
+    
+    /**
+     * Convert StudentFeeRecord entity to DTO to avoid circular reference issues
+     */
+    private StudentFeeRecordResponse convertToDTO(StudentFeeRecord record) {
+        StudentFeeRecordResponse dto = new StudentFeeRecordResponse();
+        dto.setId(record.getId());
+        
+        // Student info (avoid loading full Student entity)
+        if (record.getStudent() != null) {
+            dto.setStudentId(record.getStudent().getId());
+            dto.setStudentReference(record.getStudent().getStudentId());
+            dto.setStudentName(record.getStudent().getFirstName() + " " + record.getStudent().getLastName());
+        }
+        
+        // Academic info
+        dto.setTermYear(record.getTermYear());
+        dto.setFeeCategory(record.getFeeCategory());
+        
+        // Fee components
+        dto.setTuitionFee(record.getTuitionFee());
+        dto.setBoardingFee(record.getBoardingFee());
+        dto.setDevelopmentLevy(record.getDevelopmentLevy());
+        dto.setExamFee(record.getExamFee());
+        dto.setOtherFees(record.getOtherFees());
+        
+        // Discounts
+        dto.setHasScholarship(record.getHasScholarship());
+        dto.setScholarshipAmount(record.getScholarshipAmount());
+        dto.setSiblingDiscount(record.getSiblingDiscount());
+        dto.setEarlyPaymentDiscount(record.getEarlyPaymentDiscount());
+        
+        // Calculated totals
+        dto.setGrossAmount(record.getGrossAmount());
+        dto.setNetAmount(record.getNetAmount());
+        dto.setPreviousBalance(record.getPreviousBalance());
+        dto.setAmountPaid(record.getAmountPaid());
+        dto.setOutstandingBalance(record.getOutstandingBalance());
+        
+        // Status
+        dto.setPaymentStatus(record.getPaymentStatus());
+        dto.setIsActive(record.getIsActive());
+        
+        // Timestamps
+        dto.setCreatedAt(record.getCreatedAt());
+        dto.setUpdatedAt(record.getUpdatedAt());
+        
+        return dto;
     }
 
     /**
@@ -514,9 +565,9 @@ public class StudentFeeRecordController {
     public ResponseEntity<BulkFeeAssignmentResponse> assignFeesToAllStudents(
             @RequestBody BulkFeeAssignmentRequest request) {
         
-        log.warn("REST request to assign fees to ALL students school-wide");
+        log.warn("REST request to assign fees to ALL students in current school");
         
-        List<StudentFeeRecord> records = feeRecordService.assignFeesToAllStudents(
+        List<StudentFeeRecord> records = feeRecordService.assignFeesToAllStudentsForCurrentSchool(
             request.termYear,
             request.feeCategory,
             request.tuitionFee,

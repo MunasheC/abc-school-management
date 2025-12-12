@@ -14,6 +14,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -149,7 +150,7 @@ public class SchoolDataIsolationTest {
         SchoolContext.setCurrentSchool(schoolA);
 
         // Get all students for School A
-        List<Student> students = studentService.getAllStudentsForCurrentSchool();
+        List<Student> students = studentService.getAllStudentsForCurrentSchool(Pageable.unpaged()).getContent();
 
         // Should see exactly 2 students (Alice and Bob)
         assertEquals(2, students.size(), "School A should see exactly 2 students");
@@ -171,7 +172,7 @@ public class SchoolDataIsolationTest {
         SchoolContext.setCurrentSchool(schoolB);
 
         // Get all students for School B
-        List<Student> students = studentService.getAllStudentsForCurrentSchool();
+        List<Student> students = studentService.getAllStudentsForCurrentSchool(Pageable.unpaged()).getContent();
 
         // Should see exactly 2 students (Charlie and Diana)
         assertEquals(2, students.size(), "School B should see exactly 2 students");
@@ -374,15 +375,15 @@ public class SchoolDataIsolationTest {
     public void testContextSwitching() {
         // Start with School A
         SchoolContext.setCurrentSchool(schoolA);
-        assertEquals(2, studentService.getAllStudentsForCurrentSchool().size());
+        assertEquals(2, studentService.getAllStudentsForCurrentSchool(Pageable.unpaged()).getContent().size());
         
         // Switch to School B
         SchoolContext.setCurrentSchool(schoolB);
-        assertEquals(2, studentService.getAllStudentsForCurrentSchool().size());
+        assertEquals(2, studentService.getAllStudentsForCurrentSchool(Pageable.unpaged()).getContent().size());
         
         // Switch back to School A
         SchoolContext.setCurrentSchool(schoolA);
-        assertEquals(2, studentService.getAllStudentsForCurrentSchool().size());
+        assertEquals(2, studentService.getAllStudentsForCurrentSchool(Pageable.unpaged()).getContent().size());
         
         SchoolContext.clear();
     }

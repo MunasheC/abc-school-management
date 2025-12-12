@@ -1,11 +1,20 @@
 package com.bank.schoolmanagement.controller;
 
+import com.bank.schoolmanagement.dto.StudentLookupResponse;
+import com.bank.schoolmanagement.dto.StudentSearchRequest;
 import com.bank.schoolmanagement.entity.Payment;
 import com.bank.schoolmanagement.entity.School;
 import com.bank.schoolmanagement.service.BankPaymentService;
 import com.bank.schoolmanagement.service.BankPaymentService.BankPaymentRequest;
 import com.bank.schoolmanagement.service.BankPaymentService.DigitalBankingPaymentRequest;
 import com.bank.schoolmanagement.service.BankPaymentService.StudentLookupResult;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -14,6 +23,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Bank Payment Controller - REST API for bank teller operations
@@ -36,6 +46,7 @@ import java.util.List;
 @RequiredArgsConstructor
 @Slf4j
 @CrossOrigin(origins = "*") // TODO: Configure proper CORS for production
+@Tag(name = "Bank Payment Operations", description = "Endpoints for bank tellers and digital banking systems to process school fee payments")
 public class BankPaymentController {
 
     private final BankPaymentService bankPaymentService;
@@ -48,6 +59,14 @@ public class BankPaymentController {
      * 
      * Response: List of schools with codes and names
      */
+    @Operation(
+        summary = "Get all onboarded schools",
+        description = "Returns a list of all schools registered in the system. Used by bank teller interfaces for school selection dropdowns."
+    )
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Successfully retrieved list of schools"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
     @GetMapping("/schools")
     public ResponseEntity<List<School>> getAllSchools() {
         log.info("GET /api/bank/schools - Fetching all onboarded schools");
@@ -71,12 +90,25 @@ public class BankPaymentController {
      * 
      * Response: Student details with outstanding balance
      */
+    @Operation(
+        summary = "Lookup student by reference code",
+        description = "Retrieves student details and fee information using their unique reference code (format: SCHOOLCODE-STUDENTID). " +
+                     "Returns outstanding balance, payment status, and school information."
+    )
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Student found successfully", 
+                    content = @Content(schema = @Schema(implementation = StudentLookupResponse.class))),
+        @ApiResponse(responseCode = "404", description = "Student not found with given reference"),
+        @ApiResponse(responseCode = "400", description = "Invalid reference format")
+    })
     @PostMapping("/lookup")
-    public ResponseEntity<?> lookupStudent(@RequestBody StudentLookupRequest request) {
+    public ResponseEntity<?> lookupStudent(
+            @Parameter(description = "Student reference request containing the student reference code", required = true)
+            @RequestBody StudentLookupRequest request) {
         log.info("POST /api/bank/lookup - Looking up student: {}", request.getStudentReference());
         
         try {
-            StudentLookupResult result = bankPaymentService.lookupStudentByReference(
+            StudentLookupResponse result = bankPaymentService.lookupStudentByReference(
                 request.getStudentReference());
             
             log.info("Student lookup successful: {}", result.getStudentName());
@@ -87,6 +119,58 @@ public class BankPaymentController {
             return ResponseEntity
                 .status(HttpStatus.NOT_FOUND)
                 .body(new ErrorResponse(e.getMessage()));
+        }
+    }
+
+    /**
+     * POST /api/bank/search
+     * 
+     * Search students by name, school, and grade
+     * Used by: Bank teller when parent doesn't have reference code
+     * 
+     * Real-world scenario:
+     * - Parent: "I want to pay for my child John Doe, Grade 9 at Churchill High School"
+     * - Teller searches by these natural identifiers
+     * - Multiple matches possible (common names)
+     * 
+     * Request body:
+     * {
+     *   "studentFirstName": "Alice",
+     *   "studentLastName": "Moyo",
+     *   "schoolName": "Churchill High School",
+     *   "grade": "GRADE_9"
+     * }
+     * 
+     * Response: Array of matching students (0, 1, or multiple)
+     */
+    @PostMapping("/search")
+    public ResponseEntity<?> searchStudent(@RequestBody StudentSearchRequest request) {
+        log.info("POST /api/bank/search - Searching student: {} at {} in {}", 
+                 request.getStudentName(), request.getSchoolName(), request.getGrade());
+        
+        try {
+            List<StudentLookupResponse> results = bankPaymentService.searchStudentsByName(request);
+            
+            if (results.isEmpty()) {
+                log.warn("No students found matching search criteria");
+                String searchCriteria = "";
+                if (request.getStudentName() != null) searchCriteria += "name: " + request.getStudentName() + " ";
+                if (request.getSchoolName() != null) searchCriteria += "school: " + request.getSchoolName() + " ";
+                if (request.getGrade() != null) searchCriteria += "grade: " + request.getGrade();
+                
+                return ResponseEntity
+                    .status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("error", "No students found matching: " + searchCriteria.trim()));
+            }
+            
+            log.info("Student search successful: {} match(es) found", results.size());
+            return ResponseEntity.ok(results);
+            
+        } catch (IllegalArgumentException e) {
+            log.error("Student search failed: {}", e.getMessage());
+            return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(Map.of("error", e.getMessage()));
         }
     }
 

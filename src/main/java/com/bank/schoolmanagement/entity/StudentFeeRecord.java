@@ -48,6 +48,7 @@ public class StudentFeeRecord {
      */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "school_id", nullable = false)
+    @JsonIgnoreProperties({"students", "hibernateLazyInitializer", "handler"})
     private School school;
 
     /**
@@ -56,8 +57,9 @@ public class StudentFeeRecord {
      * @OneToOne - One fee record belongs to one student
      * @JoinColumn - Creates a foreign key column "student_id"
      */
-    @OneToOne
+    @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "student_id", nullable = false)
+    @JsonIgnoreProperties({"school", "guardian", "hibernateLazyInitializer", "handler"})
     private Student student;
 
     /** Academic term/year for this fee record */
