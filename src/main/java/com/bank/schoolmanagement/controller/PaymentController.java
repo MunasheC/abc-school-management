@@ -1,6 +1,7 @@
 package com.bank.schoolmanagement.controller;
 
 import com.bank.schoolmanagement.entity.Payment;
+import com.bank.schoolmanagement.dto.PaymentResponse;
 import com.bank.schoolmanagement.service.PaymentService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -53,7 +54,7 @@ public class PaymentController {
      * Status: COMPLETED, PENDING, REVERSED, FAILED
      */
     @PostMapping("/student/{studentId}")
-    public ResponseEntity<Payment> recordPayment(
+    public ResponseEntity<PaymentResponse> recordPayment(
             @PathVariable Long studentId,
             @Valid @RequestBody Payment payment) {
         log.info("REST request to record payment of {} for student ID: {}", 
@@ -61,7 +62,7 @@ public class PaymentController {
         
         try {
             Payment savedPayment = paymentService.recordPaymentForCurrentSchool(studentId, payment);
-            return ResponseEntity.status(HttpStatus.CREATED).body(savedPayment);
+            return ResponseEntity.status(HttpStatus.CREATED).body(PaymentResponse.fromEntity(savedPayment));
         } catch (IllegalArgumentException e) {
             log.error("Error recording payment: {}", e.getMessage());
             return ResponseEntity.notFound().build();
@@ -74,9 +75,10 @@ public class PaymentController {
      * GET /api/payments/{id}
      */
     @GetMapping("/{id}")
-    public ResponseEntity<Payment> getPaymentById(@PathVariable Long id) {
+    public ResponseEntity<PaymentResponse> getPaymentById(@PathVariable Long id) {
         log.info("REST request to get payment with ID: {}", id);
         return paymentService.getPaymentById(id)
+                .map(PaymentResponse::fromEntity)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
@@ -89,9 +91,10 @@ public class PaymentController {
      * Payment reference is auto-generated unique ID
      */
     @GetMapping("/reference/{reference}")
-    public ResponseEntity<Payment> getPaymentByReference(@PathVariable String reference) {
+    public ResponseEntity<PaymentResponse> getPaymentByReference(@PathVariable String reference) {
         log.info("REST request to get payment with reference: {}", reference);
         return paymentService.getPaymentByReference(reference)
+                .map(PaymentResponse::fromEntity)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
@@ -105,9 +108,10 @@ public class PaymentController {
      * Used to find payment by the bank's transaction ID
      */
     @GetMapping("/transaction/{transactionReference}")
-    public ResponseEntity<Payment> getPaymentByTransactionReference(@PathVariable String transactionReference) {
+    public ResponseEntity<PaymentResponse> getPaymentByTransactionReference(@PathVariable String transactionReference) {
         log.info("REST request to get payment with transaction reference: {}", transactionReference);
         return paymentService.getPaymentByTransactionReference(transactionReference)
+                .map(PaymentResponse::fromEntity)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
@@ -120,10 +124,11 @@ public class PaymentController {
      * Returns payment history ordered by date (newest first)
      */
     @GetMapping("/student/{studentId}")
-    public ResponseEntity<List<Payment>> getPaymentsByStudent(@PathVariable Long studentId) {
+    public ResponseEntity<List<PaymentResponse>> getPaymentsByStudent(@PathVariable Long studentId) {
         log.info("REST request to get payments for student ID: {}", studentId);
         List<Payment> payments = paymentService.getPaymentsByStudent(studentId);
-        return ResponseEntity.ok(payments);
+        List<PaymentResponse> dtos = payments.stream().map(PaymentResponse::fromEntity).toList();
+        return ResponseEntity.ok(dtos);
     }
 
     /**
@@ -134,10 +139,11 @@ public class PaymentController {
      * Returns only non-reversed, completed payments
      */
     @GetMapping("/student/{studentId}/active")
-    public ResponseEntity<List<Payment>> getActivePaymentsByStudent(@PathVariable Long studentId) {
+    public ResponseEntity<List<PaymentResponse>> getActivePaymentsByStudent(@PathVariable Long studentId) {
         log.info("REST request to get active payments for student ID: {}", studentId);
         List<Payment> payments = paymentService.getActivePaymentsByStudent(studentId);
-        return ResponseEntity.ok(payments);
+        List<PaymentResponse> dtos = payments.stream().map(PaymentResponse::fromEntity).toList();
+        return ResponseEntity.ok(dtos);
     }
 
     /**
@@ -148,10 +154,11 @@ public class PaymentController {
      * Example: GET /api/payments/method/MOBILE_MONEY
      */
     @GetMapping("/method/{method}")
-    public ResponseEntity<List<Payment>> getPaymentsByMethod(@PathVariable String method) {
+    public ResponseEntity<List<PaymentResponse>> getPaymentsByMethod(@PathVariable String method) {
         log.info("REST request to get payments by method: {}", method);
         List<Payment> payments = paymentService.getPaymentsByMethod(method);
-        return ResponseEntity.ok(payments);
+        List<PaymentResponse> dtos = payments.stream().map(PaymentResponse::fromEntity).toList();
+        return ResponseEntity.ok(dtos);
     }
 
     /**
@@ -162,10 +169,11 @@ public class PaymentController {
      * Valid statuses: COMPLETED, PENDING, REVERSED, FAILED
      */
     @GetMapping("/status/{status}")
-    public ResponseEntity<List<Payment>> getPaymentsByStatus(@PathVariable String status) {
+    public ResponseEntity<List<PaymentResponse>> getPaymentsByStatus(@PathVariable String status) {
         log.info("REST request to get payments with status: {}", status);
         List<Payment> payments = paymentService.getPaymentsByStatus(status);
-        return ResponseEntity.ok(payments);
+        List<PaymentResponse> dtos = payments.stream().map(PaymentResponse::fromEntity).toList();
+        return ResponseEntity.ok(dtos);
     }
 
     /**
@@ -176,10 +184,11 @@ public class PaymentController {
      * Shows all payments that have been reversed/refunded
      */
     @GetMapping("/reversed")
-    public ResponseEntity<List<Payment>> getReversedPayments() {
+    public ResponseEntity<List<PaymentResponse>> getReversedPayments() {
         log.info("REST request to get reversed payments");
         List<Payment> payments = paymentService.getReversedPayments();
-        return ResponseEntity.ok(payments);
+        List<PaymentResponse> dtos = payments.stream().map(PaymentResponse::fromEntity).toList();
+        return ResponseEntity.ok(dtos);
     }
 
     /**
@@ -190,12 +199,13 @@ public class PaymentController {
      * Date format: yyyy-MM-dd'T'HH:mm:ss
      */
     @GetMapping("/date-range")
-    public ResponseEntity<List<Payment>> getPaymentsBetweenDates(
+    public ResponseEntity<List<PaymentResponse>> getPaymentsBetweenDates(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime start,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime end) {
         log.info("REST request to get payments between {} and {}", start, end);
         List<Payment> payments = paymentService.getPaymentsBetweenDates(start, end);
-        return ResponseEntity.ok(payments);
+        List<PaymentResponse> dtos = payments.stream().map(PaymentResponse::fromEntity).toList();
+        return ResponseEntity.ok(dtos);
     }
 
     /**
@@ -204,11 +214,12 @@ public class PaymentController {
      * GET /api/payments/recent?since=2025-12-01T00:00:00
      */
     @GetMapping("/recent")
-    public ResponseEntity<List<Payment>> getRecentPayments(
+    public ResponseEntity<List<PaymentResponse>> getRecentPayments(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime since) {
         log.info("REST request to get payments since: {}", since);
         List<Payment> payments = paymentService.getRecentPayments(since);
-        return ResponseEntity.ok(payments);
+        List<PaymentResponse> dtos = payments.stream().map(PaymentResponse::fromEntity).toList();
+        return ResponseEntity.ok(dtos);
     }
 
     /**
@@ -217,10 +228,11 @@ public class PaymentController {
      * GET /api/payments/today
      */
     @GetMapping("/today")
-    public ResponseEntity<List<Payment>> getTodaysPayments() {
+    public ResponseEntity<List<PaymentResponse>> getTodaysPayments() {
         log.info("REST request to get today's payments");
         List<Payment> payments = paymentService.getTodaysPaymentsForCurrentSchool();
-        return ResponseEntity.ok(payments);
+        List<PaymentResponse> dtos = payments.stream().map(PaymentResponse::fromEntity).toList();
+        return ResponseEntity.ok(dtos);
     }
 
     /**
@@ -229,10 +241,11 @@ public class PaymentController {
      * GET /api/payments/this-week
      */
     @GetMapping("/this-week")
-    public ResponseEntity<List<Payment>> getThisWeeksPayments() {
+    public ResponseEntity<List<PaymentResponse>> getThisWeeksPayments() {
         log.info("REST request to get this week's payments");
         List<Payment> payments = paymentService.getThisWeeksPayments();
-        return ResponseEntity.ok(payments);
+        List<PaymentResponse> dtos = payments.stream().map(PaymentResponse::fromEntity).toList();
+        return ResponseEntity.ok(dtos);
     }
 
     /**
@@ -243,10 +256,11 @@ public class PaymentController {
      * Useful for tracking which bursar processed which payments
      */
     @GetMapping("/received-by/{name}")
-    public ResponseEntity<List<Payment>> getPaymentsByReceivedBy(@PathVariable String name) {
+    public ResponseEntity<List<PaymentResponse>> getPaymentsByReceivedBy(@PathVariable String name) {
         log.info("REST request to get payments received by: {}", name);
         List<Payment> payments = paymentService.getPaymentsByReceivedBy(name);
-        return ResponseEntity.ok(payments);
+        List<PaymentResponse> dtos = payments.stream().map(PaymentResponse::fromEntity).toList();
+        return ResponseEntity.ok(dtos);
     }
 
     /**
@@ -261,7 +275,7 @@ public class PaymentController {
      * Doesn't delete payment (audit trail) - marks as reversed
      */
     @PostMapping("/{id}/reverse")
-    public ResponseEntity<Payment> reversePayment(
+    public ResponseEntity<PaymentResponse> reversePayment(
             @PathVariable Long id,
             @RequestBody Map<String, String> payload) {
         log.warn("REST request to reverse payment ID: {}", id);
@@ -273,7 +287,7 @@ public class PaymentController {
         
         try {
             Payment reversed = paymentService.reversePayment(id, reason);
-            return ResponseEntity.ok(reversed);
+            return ResponseEntity.ok(PaymentResponse.fromEntity(reversed));
         } catch (IllegalArgumentException | IllegalStateException e) {
             log.error("Error reversing payment: {}", e.getMessage());
             return ResponseEntity.badRequest().build();
@@ -288,7 +302,7 @@ public class PaymentController {
      * Body: { "reason": "Duplicate payment" }
      */
     @PostMapping("/reference/{reference}/reverse")
-    public ResponseEntity<Payment> reversePaymentByReference(
+    public ResponseEntity<PaymentResponse> reversePaymentByReference(
             @PathVariable String reference,
             @RequestBody Map<String, String> payload) {
         log.warn("REST request to reverse payment with reference: {}", reference);
@@ -300,7 +314,7 @@ public class PaymentController {
         
         try {
             Payment reversed = paymentService.reversePaymentByReference(reference, reason);
-            return ResponseEntity.ok(reversed);
+            return ResponseEntity.ok(PaymentResponse.fromEntity(reversed));
         } catch (IllegalArgumentException | IllegalStateException e) {
             log.error("Error reversing payment: {}", e.getMessage());
             return ResponseEntity.badRequest().build();

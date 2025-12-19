@@ -1,3 +1,4 @@
+    
 package com.bank.schoolmanagement.service;
 
 import com.bank.schoolmanagement.context.SchoolContext;
@@ -224,6 +225,24 @@ public class StudentService {
                 });
     }
 
+    @Transactional
+    public Student updateStudentByStudentIdForCurrentSchool(String studentId, Student updatedStudent) {
+        Long schoolId = SchoolContext.getCurrentSchoolId();
+        Student existingStudent = studentRepository.findByStudentId(studentId)
+                .filter(s -> s.getSchool().getId().equals(schoolId))
+                .orElseThrow(() -> new IllegalArgumentException("Student not found for studentId: " + studentId));
+        return updateStudent(existingStudent.getId(), updatedStudent);
+    }
+
+    @Transactional
+    public Student updateStudentByNationalIdForCurrentSchool(String nationalId, Student updatedStudent) {
+        Long schoolId = SchoolContext.getCurrentSchoolId();
+        Student existingStudent = studentRepository.findByNationalId(nationalId)
+                .filter(s -> s.getSchool().getId().equals(schoolId))
+                .orElseThrow(() -> new IllegalArgumentException("Student not found for nationalId: " + nationalId));
+        return updateStudent(existingStudent.getId(), updatedStudent);
+    }
+
     /**
      * Delete student (hard delete)
      */
@@ -446,9 +465,15 @@ public class StudentService {
         log.debug("Fetching student {} for school: {}", id, currentSchool.getSchoolName());
         
         return studentRepository.findById(id)
-                .map(student -> {
-                    SchoolContext.validateSchoolAccess(student.getSchool());
-                    return student;
+                .flatMap(student -> {
+                    try {
+                        SchoolContext.validateSchoolAccess(student.getSchool());
+                        return Optional.of(student);
+                    } catch (SecurityException se) {
+                        // Treat as not found within current school
+                        log.debug("Access denied when fetching student {}: {}", id, se.getMessage());
+                        return Optional.empty();
+                    }
                 });
     }
 
@@ -546,12 +571,27 @@ public class StudentService {
         }
         
         // Handle guardian
-        if (student.getGuardian() != null && student.getGuardian().getId() == null) {
-            Guardian guardian = student.getGuardian();
-            guardian.setSchool(currentSchool);  // Set school on guardian too
-            Guardian savedGuardian = guardianService.createOrGetGuardian(guardian);
-            student.setGuardian(savedGuardian);
-            log.info("Guardian created/retrieved with ID: {}", savedGuardian.getId());
+        if (student.getGuardian() != null) {
+            // If no ID provided, create or get by phone within current school
+            if (student.getGuardian().getId() == null) {
+                Guardian guardian = student.getGuardian();
+                guardian.setSchool(currentSchool);  // Set school on guardian too
+                Guardian savedGuardian = guardianService.createOrGetGuardian(guardian);
+                student.setGuardian(savedGuardian);
+                log.info("Guardian created/retrieved with ID: {}", savedGuardian.getId());
+            } else {
+                // If client provided an ID, load a managed Guardian entity and validate school
+                Long gid = student.getGuardian().getId();
+                Guardian existingGuardian = guardianService.getGuardianById(gid)
+                        .orElseThrow(() -> new IllegalArgumentException("Guardian not found with ID: " + gid));
+
+                // Ensure the guardian belongs to the current school (prevent cross-tenant linking)
+                SchoolContext.validateSchoolAccess(existingGuardian.getSchool());
+
+                // Attach the managed guardian to student to avoid detached-entity errors
+                student.setGuardian(existingGuardian);
+                log.info("Linked student to existing guardian ID: {}", gid);
+            }
         }
         
         Student savedStudent = studentRepository.save(student);
@@ -576,9 +616,14 @@ public class StudentService {
         
         return studentRepository.findById(id)
                 .map(existingStudent -> {
-                    // Validate school ownership
-                    SchoolContext.validateSchoolAccess(existingStudent.getSchool());
-                    
+                    // Validate school ownership (convert security exception to IllegalArgumentException)
+                    try {
+                        SchoolContext.validateSchoolAccess(existingStudent.getSchool());
+                    } catch (SecurityException se) {
+                        log.warn("Unauthorized update attempt for student {}: {}", id, se.getMessage());
+                        throw new IllegalArgumentException("Student not found with ID: " + id);
+                    }
+
                     // Update fields (same as before)
                     if (updatedStudent.getFirstName() != null) {
                         existingStudent.setFirstName(updatedStudent.getFirstName());
@@ -626,16 +671,24 @@ public class StudentService {
         School currentSchool = SchoolContext.getCurrentSchool();
         log.info("Deleting student {} from school: {}", id, currentSchool.getSchoolName());
         
-        studentRepository.findById(id).ifPresent(student -> {
-            // Validate school ownership
-            SchoolContext.validateSchoolAccess(student.getSchool());
-            
-            studentRepository.deleteById(id);
-            
-            // Update school student count
-            currentSchool.decrementStudentCount();
-            
-            log.info("Student {} deleted from school: {}", id, currentSchool.getSchoolName());
+        studentRepository.findById(id).ifPresentOrElse(student -> {
+            try {
+                // Validate school ownership
+                SchoolContext.validateSchoolAccess(student.getSchool());
+
+                studentRepository.deleteById(id);
+
+                // Update school student count
+                currentSchool.decrementStudentCount();
+
+                log.info("Student {} deleted from school: {}", id, currentSchool.getSchoolName());
+            } catch (SecurityException se) {
+                log.warn("Unauthorized delete attempt for student {}: {}", id, se.getMessage());
+                throw new IllegalArgumentException("Student not found with ID: " + id);
+            }
+        }, () -> {
+            throw new IllegalArgumentException("Student not found with ID: " + id);
         });
     }
+
 }

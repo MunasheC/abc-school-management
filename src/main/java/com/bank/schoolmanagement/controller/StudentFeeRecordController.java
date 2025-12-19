@@ -1,8 +1,17 @@
+ 
 package com.bank.schoolmanagement.controller;
 
 import com.bank.schoolmanagement.dto.StudentFeeRecordResponse;
 import com.bank.schoolmanagement.entity.StudentFeeRecord;
 import com.bank.schoolmanagement.service.StudentFeeRecordService;
+
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -13,6 +22,8 @@ import org.springframework.web.bind.annotation.*;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+
 
 /**
  * StudentFeeRecord Controller - REST API for Financial Records
@@ -28,6 +39,9 @@ import java.util.Map;
 @RequestMapping("/api/school/fee-records")
 @RequiredArgsConstructor
 @Slf4j
+@Tag(name = "Student Fee Record Management", description = "Endpoints for school administrators and bursars to manage student fee records and bulk operations. Requires X-School-ID header.")
+@SecurityRequirement(name = "X-School-ID")
+
 public class StudentFeeRecordController {
 
     private final StudentFeeRecordService feeRecordService;
@@ -55,12 +69,12 @@ public class StudentFeeRecordController {
      * NOTE: grossAmount, netAmount, outstandingBalance calculated automatically
      */
     @PostMapping
-    public ResponseEntity<StudentFeeRecord> createFeeRecord(@Valid @RequestBody StudentFeeRecord feeRecord) {
+    public ResponseEntity<StudentFeeRecordResponse> createFeeRecord(@Valid @RequestBody StudentFeeRecord feeRecord) {
         log.info("REST request to create fee record for student ID: {}", 
                  feeRecord.getStudent() != null ? feeRecord.getStudent().getId() : "null");
-        
         StudentFeeRecord created = feeRecordService.createFeeRecord(feeRecord);
-        return ResponseEntity.status(HttpStatus.CREATED).body(created);
+        StudentFeeRecordResponse dto = StudentFeeRecordResponse.fromEntity(created);
+        return ResponseEntity.status(HttpStatus.CREATED).body(dto);
     }
 
     /**
@@ -69,9 +83,10 @@ public class StudentFeeRecordController {
      * GET /api/fee-records/{id}
      */
     @GetMapping("/{id}")
-    public ResponseEntity<StudentFeeRecord> getFeeRecordById(@PathVariable Long id) {
+    public ResponseEntity<StudentFeeRecordResponse> getFeeRecordById(@PathVariable Long id) {
         log.info("REST request to get fee record with ID: {}", id);
         return feeRecordService.getFeeRecordById(id)
+                .map(StudentFeeRecordResponse::fromEntity)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
@@ -84,9 +99,10 @@ public class StudentFeeRecordController {
      * Returns the current fee record for the student (by database ID)
      */
     @GetMapping("/student/{studentId}")
-    public ResponseEntity<StudentFeeRecord> getFeeRecordByStudentId(@PathVariable Long studentId) {
+    public ResponseEntity<StudentFeeRecordResponse> getFeeRecordByStudentId(@PathVariable Long studentId) {
         log.info("REST request to get fee record for student database ID: {}", studentId);
         return feeRecordService.getFeeRecordByStudentId(studentId)
+                .map(StudentFeeRecordResponse::fromEntity)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
@@ -102,8 +118,10 @@ public class StudentFeeRecordController {
     @GetMapping("/student-ref/{studentId}")
     public ResponseEntity<StudentFeeRecordResponse> getFeeRecordByStudentReference(@PathVariable String studentId) {
         log.info("REST request to get fee record for student reference: {}", studentId);
+        
         return feeRecordService.getFeeRecordByStudentReference(studentId)
-                .map(this::convertToDTO)
+                .map(StudentFeeRecordResponse::fromEntity)
+//                .map(StudentFeeRecordResponse::fromEntity)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
@@ -111,51 +129,54 @@ public class StudentFeeRecordController {
     /**
      * Convert StudentFeeRecord entity to DTO to avoid circular reference issues
      */
-    private StudentFeeRecordResponse convertToDTO(StudentFeeRecord record) {
-        StudentFeeRecordResponse dto = new StudentFeeRecordResponse();
-        dto.setId(record.getId());
-        
-        // Student info (avoid loading full Student entity)
-        if (record.getStudent() != null) {
-            dto.setStudentId(record.getStudent().getId());
-            dto.setStudentReference(record.getStudent().getStudentId());
-            dto.setStudentName(record.getStudent().getFirstName() + " " + record.getStudent().getLastName());
-        }
-        
-        // Academic info
-        dto.setTermYear(record.getTermYear());
-        dto.setFeeCategory(record.getFeeCategory());
-        
-        // Fee components
-        dto.setTuitionFee(record.getTuitionFee());
-        dto.setBoardingFee(record.getBoardingFee());
-        dto.setDevelopmentLevy(record.getDevelopmentLevy());
-        dto.setExamFee(record.getExamFee());
-        dto.setOtherFees(record.getOtherFees());
-        
-        // Discounts
-        dto.setHasScholarship(record.getHasScholarship());
-        dto.setScholarshipAmount(record.getScholarshipAmount());
-        dto.setSiblingDiscount(record.getSiblingDiscount());
-        dto.setEarlyPaymentDiscount(record.getEarlyPaymentDiscount());
-        
-        // Calculated totals
-        dto.setGrossAmount(record.getGrossAmount());
-        dto.setNetAmount(record.getNetAmount());
-        dto.setPreviousBalance(record.getPreviousBalance());
-        dto.setAmountPaid(record.getAmountPaid());
-        dto.setOutstandingBalance(record.getOutstandingBalance());
-        
-        // Status
-        dto.setPaymentStatus(record.getPaymentStatus());
-        dto.setIsActive(record.getIsActive());
-        
-        // Timestamps
-        dto.setCreatedAt(record.getCreatedAt());
-        dto.setUpdatedAt(record.getUpdatedAt());
-        
-        return dto;
-    }
+//    private StudentFeeRecordResponse StudentFeeRecordResponse.fromEntity(StudentFeeRecord record) {
+//        StudentFeeRecordResponse dto = new StudentFeeRecordResponse();
+//        dto.setId(record.getId());
+//        
+//        // Student info (avoid loading full Student entity)
+//        if (record.getStudent() != null) {
+//            dto.setStudentId(record.getStudent().getId());
+//            dto.setStudentReference(record.getStudent().getStudentId());
+//            dto.setStudentName(record.getStudent().getFirstName() + " " + record.getStudent().getLastName());
+//            dto.setGrade(record.getStudent().getGrade());
+//            dto.setClassName(record.getStudent().getClassName());
+//            dto.setNationalId(record.getStudent().getNationalId());
+//        }
+//        
+//        // Academic info
+//        dto.setTermYear(record.getTermYear());
+//        dto.setFeeCategory(record.getFeeCategory());
+//        
+//        // Fee components
+//        dto.setTuitionFee(record.getTuitionFee());
+//        dto.setBoardingFee(record.getBoardingFee());
+//        dto.setDevelopmentLevy(record.getDevelopmentLevy());
+//        dto.setExamFee(record.getExamFee());
+//        dto.setOtherFees(record.getOtherFees());
+//        
+//        // Discounts
+//        dto.setHasScholarship(record.getHasScholarship());
+//        dto.setScholarshipAmount(record.getScholarshipAmount());
+//        dto.setSiblingDiscount(record.getSiblingDiscount());
+//        dto.setEarlyPaymentDiscount(record.getEarlyPaymentDiscount());
+//        
+//        // Calculated totals
+//        dto.setGrossAmount(record.getGrossAmount());
+//        dto.setNetAmount(record.getNetAmount());
+//        dto.setPreviousBalance(record.getPreviousBalance());
+//        dto.setAmountPaid(record.getAmountPaid());
+//        dto.setOutstandingBalance(record.getOutstandingBalance());
+//        
+//        // Status
+//        dto.setPaymentStatus(record.getPaymentStatus());
+//        dto.setIsActive(record.getIsActive());
+//        
+//        // Timestamps
+//        dto.setCreatedAt(record.getCreatedAt());
+//        dto.setUpdatedAt(record.getUpdatedAt());
+//        
+//        return dto;
+//    }
 
     /**
      * READ - Get fee records by term/year
@@ -165,10 +186,31 @@ public class StudentFeeRecordController {
      * Example: GET /api/fee-records/term/2025-Term1
      */
     @GetMapping("/term/{termYear}")
-    public ResponseEntity<List<StudentFeeRecord>> getFeeRecordsByTermYear(@PathVariable String termYear) {
+    public ResponseEntity<List<StudentFeeRecordResponse>> getFeeRecordsByTermYear(@PathVariable String termYear) {
         log.info("REST request to get fee records for term: {}", termYear);
         List<StudentFeeRecord> records = feeRecordService.getFeeRecordsByTermYear(termYear);
-        return ResponseEntity.ok(records);
+        List<StudentFeeRecordResponse> dtos = records.stream().map(StudentFeeRecordResponse::fromEntity).toList();
+        return ResponseEntity.ok(dtos);
+    }
+
+    /**
+     * Get all fee records of current school
+     * @param status
+     * @return
+     */
+    @Operation(summary = "Get all fee records for the current school", description = "Returns all student fee records associated with the current school context.")
+    @ApiResponse(
+        responseCode = "200", 
+        description = "Successful retrieval of fee records",
+        content = @Content(array = @ArraySchema(schema = @Schema(implementation = StudentFeeRecordResponse.class)))
+    )
+    @GetMapping
+    public ResponseEntity<List<StudentFeeRecordResponse>> getAllFeeRecordsForCurrentSchool() {
+        List<StudentFeeRecord> records = feeRecordService.getAllFeeRecordsForCurrentSchool();
+        List<StudentFeeRecordResponse> dtos = records.stream()
+            .map(StudentFeeRecordResponse::fromEntity)
+            .toList();
+        return ResponseEntity.ok(dtos);
     }
 
     /**
@@ -179,10 +221,11 @@ public class StudentFeeRecordController {
      * Valid statuses: PAID, PARTIALLY_PAID, ARREARS, OVERDUE
      */
     @GetMapping("/payment-status/{status}")
-    public ResponseEntity<List<StudentFeeRecord>> getFeeRecordsByPaymentStatus(@PathVariable String status) {
+    public ResponseEntity<List<StudentFeeRecordResponse>> getFeeRecordsByPaymentStatus(@PathVariable String status) {
         log.info("REST request to get fee records with status: {}", status);
         List<StudentFeeRecord> records = feeRecordService.getFeeRecordsByPaymentStatus(status);
-        return ResponseEntity.ok(records);
+        List<StudentFeeRecordResponse> dtos = records.stream().map(StudentFeeRecordResponse::fromEntity).toList();
+        return ResponseEntity.ok(dtos);
     }
 
     /**
@@ -193,10 +236,11 @@ public class StudentFeeRecordController {
      * Example: GET /api/fee-records/category/Boarder
      */
     @GetMapping("/category/{category}")
-    public ResponseEntity<List<StudentFeeRecord>> getFeeRecordsByCategory(@PathVariable String category) {
+    public ResponseEntity<List<StudentFeeRecordResponse>> getFeeRecordsByCategory(@PathVariable String category) {
         log.info("REST request to get fee records for category: {}", category);
         List<StudentFeeRecord> records = feeRecordService.getFeeRecordsByFeeCategory(category);
-        return ResponseEntity.ok(records);
+        List<StudentFeeRecordResponse> dtos = records.stream().map(StudentFeeRecordResponse::fromEntity).toList();
+        return ResponseEntity.ok(dtos);
     }
 
     /**
@@ -205,10 +249,11 @@ public class StudentFeeRecordController {
      * GET /api/fee-records/scholarships
      */
     @GetMapping("/scholarships")
-    public ResponseEntity<List<StudentFeeRecord>> getRecordsWithScholarships() {
+    public ResponseEntity<List<StudentFeeRecordResponse>> getRecordsWithScholarships() {
         log.info("REST request to get fee records with scholarships");
         List<StudentFeeRecord> records = feeRecordService.getStudentsWithScholarships();
-        return ResponseEntity.ok(records);
+        List<StudentFeeRecordResponse> dtos = records.stream().map(StudentFeeRecordResponse::fromEntity).toList();
+        return ResponseEntity.ok(dtos);
     }
 
     /**
@@ -219,10 +264,11 @@ public class StudentFeeRecordController {
      * Returns all records where student still owes money
      */
     @GetMapping("/outstanding")
-    public ResponseEntity<List<StudentFeeRecord>> getRecordsWithOutstandingBalance() {
+    public ResponseEntity<List<StudentFeeRecordResponse>> getRecordsWithOutstandingBalance() {
         log.info("REST request to get fee records with outstanding balance");
         List<StudentFeeRecord> records = feeRecordService.getRecordsWithOutstandingBalance();
-        return ResponseEntity.ok(records);
+        List<StudentFeeRecordResponse> dtos = records.stream().map(StudentFeeRecordResponse::fromEntity).toList();
+        return ResponseEntity.ok(dtos);
     }
 
     /**
@@ -231,10 +277,11 @@ public class StudentFeeRecordController {
      * GET /api/fee-records/fully-paid
      */
     @GetMapping("/fully-paid")
-    public ResponseEntity<List<StudentFeeRecord>> getFullyPaidRecords() {
+    public ResponseEntity<List<StudentFeeRecordResponse>> getFullyPaidRecords() {
         log.info("REST request to get fully paid fee records");
         List<StudentFeeRecord> records = feeRecordService.getFullyPaidRecords();
-        return ResponseEntity.ok(records);
+        List<StudentFeeRecordResponse> dtos = records.stream().map(StudentFeeRecordResponse::fromEntity).toList();
+        return ResponseEntity.ok(dtos);
     }
 
     /**
@@ -246,14 +293,14 @@ public class StudentFeeRecordController {
      * Totals recalculated automatically
      */
     @PutMapping("/{id}")
-    public ResponseEntity<StudentFeeRecord> updateFeeRecord(
+    public ResponseEntity<StudentFeeRecordResponse> updateFeeRecord(
             @PathVariable Long id,
             @RequestBody StudentFeeRecord feeRecord) {
         log.info("REST request to update fee record with ID: {}", id);
-        
+
         try {
             StudentFeeRecord updated = feeRecordService.updateFeeRecord(id, feeRecord);
-            return ResponseEntity.ok(updated);
+            return ResponseEntity.ok(StudentFeeRecordResponse.fromEntity(updated));
         } catch (IllegalArgumentException e) {
             log.error("Error updating fee record: {}", e.getMessage());
             return ResponseEntity.notFound().build();
@@ -271,19 +318,20 @@ public class StudentFeeRecordController {
      * Updates amountPaid and recalculates outstandingBalance
      */
     @PostMapping("/{id}/payment")
-    public ResponseEntity<StudentFeeRecord> addPayment(
+    public ResponseEntity<StudentFeeRecordResponse> addPayment(
             @PathVariable Long id,
             @RequestBody Map<String, BigDecimal> payload) {
         log.info("REST request to add payment to fee record ID: {}", id);
-        
+
         BigDecimal amount = payload.get("amount");
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
             return ResponseEntity.badRequest().build();
         }
-        
+
         try {
             StudentFeeRecord updated = feeRecordService.addPayment(id, amount);
-            return ResponseEntity.ok(updated);
+            StudentFeeRecordResponse dto =  StudentFeeRecordResponse.fromEntity(updated);
+            return ResponseEntity.ok(dto);
         } catch (IllegalArgumentException e) {
             log.error("Error adding payment: {}", e.getMessage());
             return ResponseEntity.notFound().build();
@@ -297,8 +345,8 @@ public class StudentFeeRecordController {
      * 
      * Body: { "amount": 100.00 }
      */
-    @PostMapping("/{id}/scholarship")
-    public ResponseEntity<StudentFeeRecord> applyScholarship(
+        @PostMapping("/{id}/scholarship")
+        public ResponseEntity<StudentFeeRecordResponse> applyScholarship(
             @PathVariable Long id,
             @RequestBody Map<String, BigDecimal> payload) {
         log.info("REST request to apply scholarship to fee record ID: {}", id);
@@ -310,7 +358,7 @@ public class StudentFeeRecordController {
         
         try {
             StudentFeeRecord updated = feeRecordService.applyScholarship(id, amount);
-            return ResponseEntity.ok(updated);
+            return ResponseEntity.ok(StudentFeeRecordResponse.fromEntity(updated));
         } catch (IllegalArgumentException e) {
             log.error("Error applying scholarship: {}", e.getMessage());
             return ResponseEntity.notFound().build();
@@ -324,8 +372,8 @@ public class StudentFeeRecordController {
      * 
      * Body: { "amount": 50.00 }
      */
-    @PostMapping("/{id}/sibling-discount")
-    public ResponseEntity<StudentFeeRecord> applySiblingDiscount(
+        @PostMapping("/{id}/sibling-discount")
+        public ResponseEntity<StudentFeeRecordResponse> applySiblingDiscount(
             @PathVariable Long id,
             @RequestBody Map<String, BigDecimal> payload) {
         log.info("REST request to apply sibling discount to fee record ID: {}", id);
@@ -337,7 +385,7 @@ public class StudentFeeRecordController {
         
         try {
             StudentFeeRecord updated = feeRecordService.applySiblingDiscount(id, amount);
-            return ResponseEntity.ok(updated);
+            return ResponseEntity.ok(StudentFeeRecordResponse.fromEntity(updated));
         } catch (IllegalArgumentException e) {
             log.error("Error applying sibling discount: {}", e.getMessage());
             return ResponseEntity.notFound().build();
@@ -430,12 +478,12 @@ public class StudentFeeRecordController {
      * POST /api/fee-records/{id}/deactivate
      */
     @PostMapping("/{id}/deactivate")
-    public ResponseEntity<StudentFeeRecord> deactivateFeeRecord(@PathVariable Long id) {
+    public ResponseEntity<StudentFeeRecordResponse> deactivateFeeRecord(@PathVariable Long id) {
         log.info("REST request to deactivate fee record with ID: {}", id);
-        
+
         try {
             StudentFeeRecord deactivated = feeRecordService.deactivateFeeRecord(id);
-            return ResponseEntity.ok(deactivated);
+            return ResponseEntity.ok(StudentFeeRecordResponse.fromEntity(deactivated));
         } catch (IllegalArgumentException e) {
             log.error("Error deactivating fee record: {}", e.getMessage());
             return ResponseEntity.notFound().build();
@@ -475,7 +523,15 @@ public class StudentFeeRecordController {
         
         log.info("REST request to assign fees to grade: {}", grade);
         
-        List<StudentFeeRecord> records = feeRecordService.assignFeesToGrade(
+        // Use school-aware service method so school is assigned from context
+        List<StudentFeeRecord> existing = feeRecordService.getFeeRecordsByTermForCurrentSchool(request.termYear)
+            .stream().filter(r -> grade.equals(r.getStudent().getGrade())).toList();
+        if (!existing.isEmpty()) {
+            return ResponseEntity.badRequest().body(new BulkFeeAssignmentResponse(
+                "Fees already assigned!", grade, existing.size(), existing.stream().map(StudentFeeRecordResponse::fromEntity).toList()
+            ));
+        }
+        List<StudentFeeRecord> records = feeRecordService.assignFeesToGradeForCurrentSchool(
             grade,
             request.termYear,
             request.feeCategory,
@@ -486,11 +542,12 @@ public class StudentFeeRecordController {
             request.otherFees
         );
         
+        List<StudentFeeRecordResponse> dtos = records.stream().map(StudentFeeRecordResponse::fromEntity).toList();
         BulkFeeAssignmentResponse response = new BulkFeeAssignmentResponse(
             "Fees assigned successfully",
             grade,
             records.size(),
-            records
+            dtos
         );
         
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
@@ -521,22 +578,34 @@ public class StudentFeeRecordController {
         
         log.info("REST request to assign fees to {} grades", request.grades.size());
         
-        List<StudentFeeRecord> records = feeRecordService.assignFeesToMultipleGrades(
-            request.grades,
-            request.termYear,
-            request.feeCategory,
-            request.tuitionFee,
-            request.boardingFee,
-            request.developmentLevy,
-            request.examFee,
-            request.otherFees
-        );
+        // Call the school-aware grade method for each requested grade
+        List<StudentFeeRecord> records = new java.util.ArrayList<>();
+        for (String g : request.grades) {
+            List<StudentFeeRecord> existing = feeRecordService.getFeeRecordsByTermForCurrentSchool(request.termYear)
+                .stream().filter(r -> g.equals(r.getStudent().getGrade())).toList();
+            if (!existing.isEmpty()) {
+                return ResponseEntity.badRequest().body(new BulkFeeAssignmentResponse(
+                    "Fees already assigned!", g, existing.size(), existing.stream().map(StudentFeeRecordResponse::fromEntity).toList()
+                ));
+            }
+            records.addAll(feeRecordService.assignFeesToGradeForCurrentSchool(
+                g,
+                request.termYear,
+                request.feeCategory,
+                request.tuitionFee,
+                request.boardingFee,
+                request.developmentLevy,
+                request.examFee,
+                request.otherFees
+            ));
+        }
         
+        List<StudentFeeRecordResponse> dtos = records.stream().map(StudentFeeRecordResponse::fromEntity).toList();
         BulkFeeAssignmentResponse response = new BulkFeeAssignmentResponse(
             "Fees assigned successfully to multiple grades",
             String.join(", ", request.grades),
             records.size(),
-            records
+            dtos
         );
         
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
@@ -567,6 +636,13 @@ public class StudentFeeRecordController {
         
         log.warn("REST request to assign fees to ALL students in current school");
         
+        // use the school-aware method (already school-aware in service)
+        List<StudentFeeRecord> existing = feeRecordService.getFeeRecordsByTermForCurrentSchool(request.termYear);
+        if (!existing.isEmpty()) {
+            return ResponseEntity.badRequest().body(new BulkFeeAssignmentResponse(
+                "Fees already assigned!", "All Grades", existing.size(), existing.stream().map(StudentFeeRecordResponse::fromEntity).toList()
+            ));
+        }
         List<StudentFeeRecord> records = feeRecordService.assignFeesToAllStudentsForCurrentSchool(
             request.termYear,
             request.feeCategory,
@@ -577,11 +653,12 @@ public class StudentFeeRecordController {
             request.otherFees
         );
         
+        List<StudentFeeRecordResponse> dtos = records.stream().map(StudentFeeRecordResponse::fromEntity).toList();
         BulkFeeAssignmentResponse response = new BulkFeeAssignmentResponse(
             "Fees assigned successfully to all students",
             "All Grades",
             records.size(),
-            records
+            dtos
         );
         
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
@@ -618,7 +695,15 @@ public class StudentFeeRecordController {
         
         log.info("REST request to assign fees to class: {}", className);
         
-        List<StudentFeeRecord> records = feeRecordService.assignFeesToClass(
+        // Use school-aware method so school context is applied
+        List<StudentFeeRecord> existing = feeRecordService.getFeeRecordsByTermForCurrentSchool(request.termYear)
+            .stream().filter(r -> className.equals(r.getStudent().getClassName())).toList();
+        if (!existing.isEmpty()) {
+            return ResponseEntity.badRequest().body(new BulkFeeAssignmentResponse(
+                "Fees already assigned!", className, existing.size(), existing.stream().map(StudentFeeRecordResponse::fromEntity).toList()
+            ));
+        }
+        List<StudentFeeRecord> records = feeRecordService.assignFeesToClassForCurrentSchool(
             className,
             request.termYear,
             request.feeCategory,
@@ -629,11 +714,12 @@ public class StudentFeeRecordController {
             request.otherFees
         );
         
+        List<StudentFeeRecordResponse> dtos = records.stream().map(StudentFeeRecordResponse::fromEntity).toList();
         BulkFeeAssignmentResponse response = new BulkFeeAssignmentResponse(
             "Fees assigned successfully",
             "Class: " + className,
             records.size(),
-            records
+            dtos
         );
         
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
@@ -656,7 +742,15 @@ public class StudentFeeRecordController {
         
         log.info("REST request to assign fees to {} - {}", grade, className);
         
-        List<StudentFeeRecord> records = feeRecordService.assignFeesToGradeAndClass(
+        // Use the school-aware variant which assigns school from context
+        List<StudentFeeRecord> existing = feeRecordService.getFeeRecordsByTermForCurrentSchool(request.termYear)
+            .stream().filter(r -> grade.equals(r.getStudent().getGrade()) && className.equals(r.getStudent().getClassName())).toList();
+        if (!existing.isEmpty()) {
+            return ResponseEntity.badRequest().body(new BulkFeeAssignmentResponse(
+                "Fees already assigned!", grade + " - " + className, existing.size(), existing.stream().map(StudentFeeRecordResponse::fromEntity).toList()
+            ));
+        }
+        List<StudentFeeRecord> records = feeRecordService.assignFeesToGradeAndClassForCurrentSchool(
             grade,
             className,
             request.termYear,
@@ -668,11 +762,12 @@ public class StudentFeeRecordController {
             request.otherFees
         );
         
+        List<StudentFeeRecordResponse> dtos = records.stream().map(StudentFeeRecordResponse::fromEntity).toList();
         BulkFeeAssignmentResponse response = new BulkFeeAssignmentResponse(
             "Fees assigned successfully",
             grade + " - " + className,
             records.size(),
-            records
+            dtos
         );
         
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
@@ -705,25 +800,136 @@ public class StudentFeeRecordController {
         
         log.info("REST request to assign fees to {} forms", request.grades.size());
         
-        List<StudentFeeRecord> records = feeRecordService.assignFeesToForms(
-            request.grades,
-            request.termYear,
-            request.feeCategory,
-            request.tuitionFee,
-            request.boardingFee,
-            request.developmentLevy,
-            request.examFee,
-            request.otherFees
-        );
+        // Use school-aware grade assignment for each form
+        List<StudentFeeRecord> records = new java.util.ArrayList<>();
+        for (String form : request.grades) {
+            List<StudentFeeRecord> existing = feeRecordService.getFeeRecordsByTermForCurrentSchool(request.termYear)
+                .stream().filter(r -> form.equals(r.getStudent().getGrade())).toList();
+            if (!existing.isEmpty()) {
+                return ResponseEntity.badRequest().body(new BulkFeeAssignmentResponse(
+                    "Fees already assigned!", form, existing.size(), existing.stream().map(StudentFeeRecordResponse::fromEntity).toList()
+                ));
+            }
+            records.addAll(feeRecordService.assignFeesToGradeForCurrentSchool(
+                form,
+                request.termYear,
+                request.feeCategory,
+                request.tuitionFee,
+                request.boardingFee,
+                request.developmentLevy,
+                request.examFee,
+                request.otherFees
+            ));
+        }
         
+        List<StudentFeeRecordResponse> dtos = records.stream().map(StudentFeeRecordResponse::fromEntity).toList();
         BulkFeeAssignmentResponse response = new BulkFeeAssignmentResponse(
             "Fees assigned successfully to secondary school forms",
             String.join(", ", request.grades),
             records.size(),
-            records
+            dtos
         );
         
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+       /**
+     * BULK UPDATE - Update fee records for a single grade
+     *
+     * PUT /api/fee-records/bulk/grade/{grade}
+     * Body: { "termYear": "2025-Term1", ...fields to update... }
+     */
+    @PutMapping("/bulk/grade/{grade}")
+    public ResponseEntity<BulkFeeAssignmentResponse> bulkUpdateGrade(
+            @PathVariable String grade,
+            @RequestBody BulkFeeAssignmentRequest update) {
+        log.info("Bulk update fee records for grade: {} term: {}", grade, update.termYear);
+        List<StudentFeeRecord> records = feeRecordService.getFeeRecordsByTermForCurrentSchool(update.termYear)
+            .stream().filter(r -> grade.equals(r.getStudent().getGrade())).toList();
+        if (records.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        int updated = 0;
+        for (StudentFeeRecord r : records) {
+            if (update.feeCategory != null) r.setFeeCategory(update.feeCategory);
+            if (update.tuitionFee != null) r.setTuitionFee(update.tuitionFee);
+            if (update.boardingFee != null) r.setBoardingFee(update.boardingFee);
+            if (update.developmentLevy != null) r.setDevelopmentLevy(update.developmentLevy);
+            if (update.examFee != null) r.setExamFee(update.examFee);
+            if (update.otherFees != null) r.setOtherFees(update.otherFees);
+            feeRecordService.updateFeeRecord(r.getId(), r);
+            updated++;
+        }
+        List<StudentFeeRecordResponse> dtos = records.stream().map(StudentFeeRecordResponse::fromEntity).toList();
+        return ResponseEntity.ok(new BulkFeeAssignmentResponse(
+            "Bulk update successful", grade, updated, dtos
+        ));
+    }
+
+    /**
+     * BULK UPDATE - Update fee records for multiple grades
+     *
+     * PUT /api/fee-records/bulk/grades
+     * Body: { "grades": ["Form 1", "Form 2"], "termYear": "2025-Term1", ...fields to update... }
+     */
+    @PutMapping("/bulk/grades")
+    public ResponseEntity<BulkFeeAssignmentResponse> bulkUpdateGrades(
+            @RequestBody BulkFeeAssignmentRequestMultiGrade update) {
+        log.info("Bulk update fee records for grades: {} term: {}", update.grades, update.termYear);
+        int updated = 0;
+        List<StudentFeeRecord> allRecords = new java.util.ArrayList<>();
+        for (String grade : update.grades) {
+            List<StudentFeeRecord> records = feeRecordService.getFeeRecordsByTermForCurrentSchool(update.termYear)
+                .stream().filter(r -> grade.equals(r.getStudent().getGrade())).toList();
+            for (StudentFeeRecord r : records) {
+                if (update.feeCategory != null) r.setFeeCategory(update.feeCategory);
+                if (update.tuitionFee != null) r.setTuitionFee(update.tuitionFee);
+                if (update.boardingFee != null) r.setBoardingFee(update.boardingFee);
+                if (update.developmentLevy != null) r.setDevelopmentLevy(update.developmentLevy);
+                if (update.examFee != null) r.setExamFee(update.examFee);
+                if (update.otherFees != null) r.setOtherFees(update.otherFees);
+                feeRecordService.updateFeeRecord(r.getId(), r);
+                updated++;
+            }
+            allRecords.addAll(records);
+        }
+        List<StudentFeeRecordResponse> dtos = allRecords.stream().map(StudentFeeRecordResponse::fromEntity).toList();
+        return ResponseEntity.ok(new BulkFeeAssignmentResponse(
+            "Bulk update successful", String.join(", ", update.grades), updated, dtos
+        ));
+    }
+
+    /**
+     * BULK UPDATE - Update fee records for a class/stream
+     *
+     * PUT /api/fee-records/bulk/class/{className}
+     * Body: { "termYear": "2025-Term1", ...fields to update... }
+     */
+    @PutMapping("/bulk/class/{className}")
+    public ResponseEntity<BulkFeeAssignmentResponse> bulkUpdateClass(
+            @PathVariable String className,
+            @RequestBody BulkFeeAssignmentRequest update) {
+        log.info("Bulk update fee records for class: {} term: {}", className, update.termYear);
+        List<StudentFeeRecord> records = feeRecordService.getFeeRecordsByTermForCurrentSchool(update.termYear)
+            .stream().filter(r -> className.equals(r.getStudent().getClassName())).toList();
+        if (records.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        int updated = 0;
+        for (StudentFeeRecord r : records) {
+            if (update.feeCategory != null) r.setFeeCategory(update.feeCategory);
+            if (update.tuitionFee != null) r.setTuitionFee(update.tuitionFee);
+            if (update.boardingFee != null) r.setBoardingFee(update.boardingFee);
+            if (update.developmentLevy != null) r.setDevelopmentLevy(update.developmentLevy);
+            if (update.examFee != null) r.setExamFee(update.examFee);
+            if (update.otherFees != null) r.setOtherFees(update.otherFees);
+            feeRecordService.updateFeeRecord(r.getId(), r);
+            updated++;
+        }
+        List<StudentFeeRecordResponse> dtos = records.stream().map(StudentFeeRecordResponse::fromEntity).toList();
+        return ResponseEntity.ok(new BulkFeeAssignmentResponse(
+            "Bulk update successful", className, updated, dtos
+        ));
     }
 
     /**
@@ -772,10 +978,10 @@ public class StudentFeeRecordController {
         public String message;
         public String affectedGrades;
         public int studentsAffected;
-        public List<StudentFeeRecord> feeRecords;
+        public List<StudentFeeRecordResponse> feeRecords;
 
         public BulkFeeAssignmentResponse(String message, String affectedGrades, 
-                                         int studentsAffected, List<StudentFeeRecord> feeRecords) {
+                                         int studentsAffected, List<StudentFeeRecordResponse> feeRecords) {
             this.message = message;
             this.affectedGrades = affectedGrades;
             this.studentsAffected = studentsAffected;

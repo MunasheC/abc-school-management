@@ -2,6 +2,7 @@ package com.bank.schoolmanagement.entity;
 
 import com.bank.schoolmanagement.enums.PaymentMethod;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -64,6 +65,7 @@ public class Payment {
      */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "student_id", nullable = false)
+    @JsonIgnore
     private Student student;
 
     /**
@@ -72,6 +74,7 @@ public class Payment {
      */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "fee_record_id")
+    @JsonIgnore
     private StudentFeeRecord feeRecord;
 
     @Column(name = "amount", precision = 12, scale = 2, nullable = false)

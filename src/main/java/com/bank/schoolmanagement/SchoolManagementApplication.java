@@ -21,7 +21,7 @@ public class SchoolManagementApplication {
     public static void main(String[] args) {
         SpringApplication.run(SchoolManagementApplication.class, args);
         System.out.println("\n✅ School Management System Started Successfully!");
-        System.out.println("🌐 Access the application at: http://localhost:8080");
-        System.out.println("📚 Ready to learn Spring Boot!\n");
+        
+        
     }
 }

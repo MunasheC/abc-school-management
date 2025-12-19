@@ -3,11 +3,11 @@ package com.bank.schoolmanagement.controller;
 import com.bank.schoolmanagement.dto.StudentLookupResponse;
 import com.bank.schoolmanagement.dto.StudentSearchRequest;
 import com.bank.schoolmanagement.entity.Payment;
-import com.bank.schoolmanagement.entity.School;
+import com.bank.schoolmanagement.dto.PaymentResponse;
+import com.bank.schoolmanagement.dto.SchoolResponse;
 import com.bank.schoolmanagement.service.BankPaymentService;
 import com.bank.schoolmanagement.service.BankPaymentService.BankPaymentRequest;
 import com.bank.schoolmanagement.service.BankPaymentService.DigitalBankingPaymentRequest;
-import com.bank.schoolmanagement.service.BankPaymentService.StudentLookupResult;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -64,17 +64,20 @@ public class BankPaymentController {
         description = "Returns a list of all schools registered in the system. Used by bank teller interfaces for school selection dropdowns."
     )
     @ApiResponses(value = {
-        @ApiResponse(responseCode = "200", description = "Successfully retrieved list of schools"),
+        @ApiResponse(responseCode = "200", description = "Successfully retrieved list of schools",
+                     content = @Content(array = @io.swagger.v3.oas.annotations.media.ArraySchema(schema = @Schema(implementation = SchoolResponse.class)))),
         @ApiResponse(responseCode = "500", description = "Internal server error")
     })
     @GetMapping("/schools")
-    public ResponseEntity<List<School>> getAllSchools() {
+    public ResponseEntity<List<SchoolResponse>> getAllSchools() {
         log.info("GET /api/bank/schools - Fetching all onboarded schools");
-        
-        List<School> schools = bankPaymentService.getAllOnboardedSchools();
-        
-        log.info("Found {} onboarded schools", schools.size());
-        return ResponseEntity.ok(schools);
+
+        List<com.bank.schoolmanagement.entity.School> schools = bankPaymentService.getAllOnboardedSchools();
+
+        List<SchoolResponse> dtos = schools.stream().map(SchoolResponse::fromEntity).toList();
+
+        log.info("Found {} onboarded schools", dtos.size());
+        return ResponseEntity.ok(dtos);
     }
 
     /**
@@ -208,7 +211,7 @@ public class BankPaymentController {
             Payment payment = bankPaymentService.recordBankCounterPayment(request);
             
             // Create response
-            PaymentResponse response = PaymentResponse.fromPayment(payment);
+            PaymentResponse response = PaymentResponse.fromEntity(payment);
             
             log.info("Bank counter payment recorded successfully: {}", 
                      payment.getPaymentReference());
@@ -261,7 +264,7 @@ public class BankPaymentController {
             Payment payment = bankPaymentService.recordDigitalBankingPayment(request);
             
             // Create response
-            PaymentResponse response = PaymentResponse.fromPayment(payment);
+            PaymentResponse response = PaymentResponse.fromEntity(payment);
             
             log.info("Digital banking payment recorded successfully: {}", 
                      payment.getPaymentReference());
@@ -298,7 +301,7 @@ public class BankPaymentController {
         BigDecimal total = bankPaymentService.calculateTodaysBankPaymentsTotal();
         
         ReconciliationResponse response = new ReconciliationResponse();
-        response.setPayments(payments);
+        response.setPayments(payments.stream().map(PaymentResponse::fromEntity).toList());
         response.setTotalAmount(total);
         response.setPaymentCount(payments.size());
         response.setReconciliationDate(java.time.LocalDate.now());
@@ -331,7 +334,7 @@ public class BankPaymentController {
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
             
             ReconciliationResponse response = new ReconciliationResponse();
-            response.setPayments(payments);
+            response.setPayments(payments.stream().map(PaymentResponse::fromEntity).toList());
             response.setTotalAmount(total);
             response.setPaymentCount(payments.size());
             response.setReconciliationDate(java.time.LocalDate.now());
@@ -390,41 +393,11 @@ public class BankPaymentController {
         private String studentReference;
     }
 
-    @lombok.Data
-    public static class PaymentResponse {
-        private String paymentReference;
-        private String studentName;
-        private String schoolName;
-        private BigDecimal amount;
-        private String paymentMethod;
-        private String status;
-        private String bankTransactionId;
-        private BigDecimal newOutstandingBalance;
-        private java.time.LocalDateTime paymentDate;
-        
-        public static PaymentResponse fromPayment(Payment payment) {
-            PaymentResponse response = new PaymentResponse();
-            response.setPaymentReference(payment.getPaymentReference());
-            response.setStudentName(payment.getStudent().getFullName());
-            response.setSchoolName(payment.getSchool().getSchoolName());
-            response.setAmount(payment.getAmount());
-            response.setPaymentMethod(payment.getPaymentMethod().getDisplayName());
-            response.setStatus(payment.getStatus());
-            response.setBankTransactionId(payment.getBankTransactionId());
-            response.setPaymentDate(payment.getPaymentDate());
-            
-            // Get updated outstanding balance
-            if (payment.getFeeRecord() != null) {
-                response.setNewOutstandingBalance(payment.getFeeRecord().getOutstandingBalance());
-            }
-            
-            return response;
-        }
-    }
+    // PaymentResponse DTO is provided in `com.bank.schoolmanagement.dto.PaymentResponse`
 
     @lombok.Data
     public static class ReconciliationResponse {
-        private List<Payment> payments;
+        private List<PaymentResponse> payments;
         private BigDecimal totalAmount;
         private int paymentCount;
         private java.time.LocalDate reconciliationDate;

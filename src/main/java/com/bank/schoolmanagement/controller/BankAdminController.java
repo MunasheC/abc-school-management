@@ -1,6 +1,10 @@
 package com.bank.schoolmanagement.controller;
 
 import com.bank.schoolmanagement.dto.SchoolUpdateRequest;
+import com.bank.schoolmanagement.dto.SchoolSummaryResponse;
+import com.bank.schoolmanagement.dto.SchoolDetailsResponse;
+import com.bank.schoolmanagement.dto.SchoolResponse;
+import com.bank.schoolmanagement.dto.PaymentResponse;
 import com.bank.schoolmanagement.entity.Payment;
 import com.bank.schoolmanagement.entity.School;
 import com.bank.schoolmanagement.entity.Student;
@@ -68,14 +72,14 @@ public class BankAdminController {
      * - Active status
      */
     @GetMapping("/schools")
-    public ResponseEntity<List<SchoolSummary>> getAllSchools() {
+    public ResponseEntity<List<SchoolSummaryResponse>> getAllSchools() {
         log.info("Bank admin: Getting all schools with statistics");
-        
+
         List<School> schools = schoolRepository.findAll();
-        List<SchoolSummary> summaries = schools.stream()
+        List<SchoolSummaryResponse> summaries = schools.stream()
                 .map(this::createSchoolSummary)
                 .collect(Collectors.toList());
-        
+
         return ResponseEntity.ok(summaries);
     }
 
@@ -92,14 +96,13 @@ public class BankAdminController {
      * - Recent payment activity
      */
     @GetMapping("/schools/code/{schoolCode}")
-    public ResponseEntity<SchoolDetails> getSchoolDetailsByCode(@PathVariable String schoolCode) {
+    public ResponseEntity<SchoolDetailsResponse> getSchoolDetailsByCode(@PathVariable String schoolCode) {
         log.info("Bank admin: Getting details for school code: {}", schoolCode);
         
         School school = schoolRepository.findBySchoolCode(schoolCode)
                 .orElseThrow(() -> new IllegalArgumentException("School not found with code: " + schoolCode));
         
-        SchoolDetails details = new SchoolDetails();
-        details.setSchool(school);
+        SchoolDetailsResponse details = SchoolDetailsResponse.fromSchool(school);
         
         // Student statistics
         long totalStudents = studentRepository.countBySchool(school);
@@ -144,24 +147,25 @@ public class BankAdminController {
                     Collectors.counting()
                 ));
         details.setPaymentsByMethod(paymentsByMethod);
-        
+
         // Bank channel vs School channel breakdown
         long bankChannelPayments = payments.stream()
-                .filter(p -> !p.getIsReversed() && p.isBankChannelPayment())
-                .count();
+            .filter(p -> !p.getIsReversed() && p.isBankChannelPayment())
+            .count();
         long schoolChannelPayments = payments.stream()
-                .filter(p -> !p.getIsReversed() && !p.isBankChannelPayment())
-                .count();
-        
+            .filter(p -> !p.getIsReversed() && !p.isBankChannelPayment())
+            .count();
+
         details.setBankChannelPayments(bankChannelPayments);
         details.setSchoolChannelPayments(schoolChannelPayments);
-        
-        // Recent payments (last 10)
-        List<Payment> recentPayments = payments.stream()
-                .filter(p -> !p.getIsReversed())
-                .sorted((p1, p2) -> p2.getPaymentDate().compareTo(p1.getPaymentDate()))
-                .limit(10)
-                .collect(Collectors.toList());
+
+        // Recent payments (last 10) mapped to DTOs
+        List<PaymentResponse> recentPayments = payments.stream()
+            .filter(p -> !p.getIsReversed())
+            .sorted((p1, p2) -> p2.getPaymentDate().compareTo(p1.getPaymentDate()))
+            .limit(10)
+            .map(PaymentResponse::fromEntity)
+            .collect(Collectors.toList());
         details.setRecentPayments(recentPayments);
         
         return ResponseEntity.ok(details);
@@ -183,7 +187,7 @@ public class BankAdminController {
      * }
      */
     @PostMapping("/schools")
-    public ResponseEntity<School> onboardSchool(@Valid @RequestBody School school) {
+    public ResponseEntity<SchoolResponse> onboardSchool(@Valid @RequestBody School school) {
         log.info("Bank admin: Onboarding new school: {}", school.getSchoolName());
         
         // Validate school code uniqueness
@@ -198,8 +202,8 @@ public class BankAdminController {
         
         School savedSchool = schoolRepository.save(school);
         log.info("School onboarded successfully: {} (ID: {})", savedSchool.getSchoolName(), savedSchool.getId());
-        
-        return ResponseEntity.status(HttpStatus.CREATED).body(savedSchool);
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(SchoolResponse.fromEntity(savedSchool));
     }
 
     /**
@@ -209,7 +213,7 @@ public class BankAdminController {
      * Only include the fields you want to update in the request body.
      */
     @PutMapping("/schools/code/{schoolCode}")
-    public ResponseEntity<School> updateSchoolByCode(
+    public ResponseEntity<SchoolResponse> updateSchoolByCode(
             @PathVariable String schoolCode, 
             @RequestBody SchoolUpdateRequest updateRequest) {
         log.info("Bank admin: Updating school with code: {}", schoolCode);
@@ -305,7 +309,7 @@ public class BankAdminController {
         
         School updatedSchool = schoolRepository.save(school);
         log.info("School updated successfully: {}", schoolCode);
-        return ResponseEntity.ok(updatedSchool);
+        return ResponseEntity.ok(SchoolResponse.fromEntity(updatedSchool));
     }
 
     /**
@@ -456,64 +460,40 @@ public class BankAdminController {
 
     // ==================== Helper Methods ====================
 
-    private SchoolSummary createSchoolSummary(School school) {
-        SchoolSummary summary = new SchoolSummary();
-        summary.setSchool(school);
-        
+        private SchoolSummaryResponse createSchoolSummary(School school) {
+        SchoolSummaryResponse summary = SchoolSummaryResponse.fromEntity(school);
+
         // Student count
         long studentCount = studentRepository.countBySchool(school);
         summary.setTotalStudents(studentCount);
-        
+
         // Outstanding fees
         List<StudentFeeRecord> feeRecords = feeRecordRepository.findBySchool(school);
         BigDecimal outstanding = feeRecords.stream()
-                .map(StudentFeeRecord::getOutstandingBalance)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+            .map(StudentFeeRecord::getOutstandingBalance)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
         summary.setTotalOutstanding(outstanding);
-        
+
         // Total payments
         List<Payment> payments = paymentRepository.findBySchool(school);
         BigDecimal totalPayments = payments.stream()
-                .filter(p -> !p.getIsReversed())
-                .map(Payment::getAmount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+            .filter(p -> !p.getIsReversed())
+            .map(Payment::getAmount)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
         summary.setTotalPaymentsReceived(totalPayments);
-        
+
         // Last payment date
         payments.stream()
-                .filter(p -> !p.getIsReversed())
-                .max((p1, p2) -> p1.getPaymentDate().compareTo(p2.getPaymentDate()))
-                .ifPresent(p -> summary.setLastPaymentDate(p.getPaymentDate()));
-        
+            .filter(p -> !p.getIsReversed())
+            .max((p1, p2) -> p1.getPaymentDate().compareTo(p2.getPaymentDate()))
+            .ifPresent(p -> summary.setLastPaymentDate(p.getPaymentDate()));
+
         return summary;
-    }
+        }
 
     // ==================== DTOs ====================
 
-    @Data
-    public static class SchoolSummary {
-        private School school;
-        private long totalStudents;
-        private BigDecimal totalOutstanding;
-        private BigDecimal totalPaymentsReceived;
-        private LocalDateTime lastPaymentDate;
-    }
-
-    @Data
-    public static class SchoolDetails {
-        private School school;
-        private long totalStudents;
-        private long activeStudents;
-        private Map<String, Long> studentsByGrade;
-        private BigDecimal totalFeesAssigned;
-        private BigDecimal totalOutstanding;
-        private BigDecimal totalPaymentsReceived;
-        private long totalPayments;
-        private Map<String, Long> paymentsByMethod;
-        private long bankChannelPayments;
-        private long schoolChannelPayments;
-        private List<Payment> recentPayments;
-    }
+    // SchoolSummaryResponse and SchoolDetailsResponse DTOs are defined in `com.bank.schoolmanagement.dto` package
 
     @Data
     public static class BankAnalytics {

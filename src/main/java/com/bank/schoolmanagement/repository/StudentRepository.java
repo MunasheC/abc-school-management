@@ -1,3 +1,4 @@
+    
 package com.bank.schoolmanagement.repository;
 
 import com.bank.schoolmanagement.entity.Student;
@@ -103,6 +104,9 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
      */
     List<Student> findByFirstNameIgnoreCaseAndLastNameIgnoreCaseAndSchoolIdAndGrade(
         String firstName, String lastName, Long schoolId, String grade);
+
+    
+    Optional<Student> findByNationalId(String nationalId);
 
     /**
      * Find active students only

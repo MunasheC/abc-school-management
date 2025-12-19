@@ -1,13 +1,10 @@
+
 package com.bank.schoolmanagement.controller;
 
 import com.bank.schoolmanagement.dto.UploadSummary;
-import com.bank.schoolmanagement.entity.Payment;
 import com.bank.schoolmanagement.entity.Student;
-import com.bank.schoolmanagement.entity.StudentFeeRecord;
-import com.bank.schoolmanagement.enums.PaymentMethod;
+import com.bank.schoolmanagement.dto.StudentResponse;
 import com.bank.schoolmanagement.service.ExcelService;
-import com.bank.schoolmanagement.service.PaymentService;
-import com.bank.schoolmanagement.service.StudentFeeRecordService;
 import com.bank.schoolmanagement.service.StudentService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -28,10 +25,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.math.BigDecimal;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.util.List;
+
 
 /**
  * Student Controller - REST API Endpoints
@@ -69,8 +63,7 @@ public class StudentController {
 
     private final StudentService studentService;
     private final ExcelService excelService;
-    private final StudentFeeRecordService feeRecordService;
-    private final PaymentService paymentService;
+    
 
     /**
      * CREATE - Add a new student
@@ -93,10 +86,10 @@ public class StudentController {
      * }
      */
     @PostMapping
-    public ResponseEntity<Student> createStudent(@Valid @RequestBody Student student) {
+    public ResponseEntity<StudentResponse> createStudent(@Valid @RequestBody Student student) {
         log.info("REST request to create student: {} {}", student.getFirstName(), student.getLastName());
         Student createdStudent = studentService.createStudentForCurrentSchool(student);
-        return ResponseEntity.status(HttpStatus.CREATED).body(createdStudent);
+        return ResponseEntity.status(HttpStatus.CREATED).body(StudentResponse.fromEntity(createdStudent));
     }
 
     /**
@@ -107,9 +100,10 @@ public class StudentController {
      * Returns JSON array of all students
      */
     @GetMapping
-    public ResponseEntity<Page<Student>> getAllStudents(Pageable pageable) {
+    public ResponseEntity<Page<StudentResponse>> getAllStudents(Pageable pageable) {
         log.info("REST request to get all students");
-        Page<Student> students = studentService.getAllStudentsForCurrentSchool(pageable);
+        Page<StudentResponse> students = studentService.getAllStudentsForCurrentSchool(pageable)
+            .map(StudentResponse::fromEntity);
         return ResponseEntity.ok(students);
     }
 
@@ -118,12 +112,14 @@ public class StudentController {
      * 
      * GET /api/students/active
      */
-    @GetMapping("/active")
-    public ResponseEntity<List<Student>> getActiveStudents() {
-        log.info("REST request to get active students");
-        List<Student> students = studentService.getActiveStudents();
-        return ResponseEntity.ok(students);
-    }
+    // @GetMapping("/active")
+    // public ResponseEntity<List<StudentResponse>> getActiveStudents() {
+    //     log.info("REST request to get active students");
+    //     List<StudentResponse> students = studentService.getActiveStudents().stream()
+    //         .map(StudentResponse::fromEntity)
+    //         .toList();
+    //     return ResponseEntity.ok(students);
+    // }
 
     /**
      * READ - Get student by database ID
@@ -135,9 +131,10 @@ public class StudentController {
      * Example: GET /api/students/1
      */
     @GetMapping("/{id}")
-    public ResponseEntity<Student> getStudentById(@PathVariable Long id) {
+    public ResponseEntity<StudentResponse> getStudentById(@PathVariable Long id) {
         log.info("REST request to get student with ID: {}", id);
         return studentService.getStudentByIdForCurrentSchool(id)
+                .map(StudentResponse::fromEntity)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
@@ -150,70 +147,14 @@ public class StudentController {
      * Example: GET /api/students/student-id/STU1702040288567
      */
     @GetMapping("/student-id/{studentId}")
-    public ResponseEntity<Student> getStudentByStudentId(@PathVariable String studentId) {
+    public ResponseEntity<StudentResponse> getStudentByStudentId(@PathVariable String studentId) {
         log.info("REST request to get student with student ID: {}", studentId);
         return studentService.getStudentByStudentIdForCurrentSchool(studentId)
+                .map(StudentResponse::fromEntity)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    /**
-     * READ - Get students by grade
-     * 
-     * GET /api/students/grade/{grade}
-     * 
-     * Example: GET /api/students/grade/Grade%205
-     * (Note: Space is encoded as %20 in URLs)
-     */
-    @GetMapping("/grade/{grade}")
-    public ResponseEntity<List<Student>> getStudentsByGrade(@PathVariable String grade) {
-        log.info("REST request to get students in grade: {}", grade);
-        List<Student> students = studentService.getStudentsByGradeForCurrentSchool(grade);
-        return ResponseEntity.ok(students);
-    }
-
-    /**
-     * READ - Search students by name
-     * 
-     * GET /api/students/search?name=John
-     * 
-     * @RequestParam - Extracts query parameter from URL
-     */
-    @GetMapping("/search")
-    public ResponseEntity<List<Student>> searchStudents(@RequestParam String name) {
-        log.info("REST request to search students with name: {}", name);
-        List<Student> students = studentService.searchStudentsByNameForCurrentSchool(name);
-        return ResponseEntity.ok(students);
-    }
-
-    /**
-     * READ - Get students by guardian phone (siblings)
-     * 
-     * GET /api/students/guardian-phone/{phone}
-     * 
-     * LEARNING: Uses new Guardian relationship
-     * Returns all students sharing the same guardian (siblings)
-     * Useful for bank integration: "Show me all students whose parent has this phone number"
-     */
-    @GetMapping("/guardian-phone/{phone}")
-    public ResponseEntity<List<Student>> getStudentsByGuardianPhone(@PathVariable String phone) {
-        log.info("REST request to get students with guardian phone: {}", phone);
-        List<Student> students = studentService.getStudentsByGuardianPhone(phone);
-        return ResponseEntity.ok(students);
-    }
-
-    /**
-     * READ - Get students enrolled after a date
-     * 
-     * GET /api/students/enrolled-after?date=2024-01-01
-     */
-    @GetMapping("/enrolled-after")
-    public ResponseEntity<List<Student>> getStudentsEnrolledAfter(@RequestParam String date) {
-        log.info("REST request to get students enrolled after: {}", date);
-        LocalDate enrollmentDate = LocalDate.parse(date);
-        List<Student> students = studentService.getStudentsEnrolledAfter(enrollmentDate);
-        return ResponseEntity.ok(students);
-    }
 
     /**
      * UPDATE - Update student information (PARTIAL UPDATE)
@@ -231,16 +172,42 @@ public class StudentController {
      * This will update only grade and address, keeping all other fields unchanged.
      */
     @PutMapping("/{id}")
-    public ResponseEntity<Student> updateStudent(
+    public ResponseEntity<StudentResponse> updateStudent(
             @PathVariable Long id,
             @RequestBody Student student) {  // Removed @Valid for partial updates
         log.info("REST request to update student with ID: {}", id);
         try {
             Student updatedStudent = studentService.updateStudentForCurrentSchool(id, student);
-            return ResponseEntity.ok(updatedStudent);
+            return ResponseEntity.ok(StudentResponse.fromEntity(updatedStudent));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.notFound().build();
         }
+    }
+
+        /**
+     * UPDATE - Update student by studentId (PARTIAL UPDATE)
+     * PUT /api/school/students/by-student-id/{studentId}
+     */
+    @PutMapping("/by-student-id/{studentId}")
+    public ResponseEntity<StudentResponse> updateStudentByStudentId(
+            @PathVariable String studentId,
+            @RequestBody Student student) {
+        log.info("REST request to update student with studentId: {}", studentId);
+        Student updatedStudent = studentService.updateStudentByStudentIdForCurrentSchool(studentId, student);
+        return ResponseEntity.ok(StudentResponse.fromEntity(updatedStudent));
+    }
+
+    /**
+     * UPDATE - Update student by nationalId (PARTIAL UPDATE)
+     * PUT /api/school/students/by-national-id/{nationalId}
+     */
+    @PutMapping("/by-national-id/{nationalId}")
+    public ResponseEntity<StudentResponse> updateStudentByNationalId(
+            @PathVariable String nationalId,
+            @RequestBody Student student) {
+        log.info("REST request to update student with nationalId: {}", nationalId);
+        Student updatedStudent = studentService.updateStudentByNationalIdForCurrentSchool(nationalId, student);
+        return ResponseEntity.ok(StudentResponse.fromEntity(updatedStudent));
     }
 
     /**
@@ -267,11 +234,11 @@ public class StudentController {
      * PATCH /api/students/{id}/deactivate
      */
     @PatchMapping("/{id}/deactivate")
-    public ResponseEntity<Student> deactivateStudent(@PathVariable Long id) {
+    public ResponseEntity<StudentResponse> deactivateStudent(@PathVariable Long id) {
         log.info("REST request to deactivate student with ID: {}", id);
         try {
             Student deactivatedStudent = studentService.deactivateStudent(id);
-            return ResponseEntity.ok(deactivatedStudent);
+            return ResponseEntity.ok(StudentResponse.fromEntity(deactivatedStudent));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.notFound().build();
         }
@@ -283,258 +250,18 @@ public class StudentController {
      * PATCH /api/students/{id}/reactivate
      */
     @PatchMapping("/{id}/reactivate")
-    public ResponseEntity<Student> reactivateStudent(@PathVariable Long id) {
+    public ResponseEntity<StudentResponse> reactivateStudent(@PathVariable Long id) {
         log.info("REST request to reactivate student with ID: {}", id);
         try {
             Student reactivatedStudent = studentService.reactivateStudent(id);
-            return ResponseEntity.ok(reactivatedStudent);
+            return ResponseEntity.ok(StudentResponse.fromEntity(reactivatedStudent));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.notFound().build();
         }
     }
 
-    /**
-     * Statistics - Get count by grade
-     * 
-     * GET /api/students/stats/count-by-grade?grade=Grade%205
-     */
-    @GetMapping("/stats/count-by-grade")
-    public ResponseEntity<Long> countByGrade(@RequestParam String grade) {
-        log.info("REST request to count students in grade: {}", grade);
-        long count = studentService.countStudentsByGrade(grade);
-        return ResponseEntity.ok(count);
-    }
 
-    /**
-     * Statistics - Get total active students
-     * 
-     * GET /api/students/stats/active-count
-     */
-    @GetMapping("/stats/active-count")
-    public ResponseEntity<Long> countActiveStudents() {
-        log.info("REST request to count active students");
-        long count = studentService.countActiveStudents();
-        return ResponseEntity.ok(count);
-    }
-
-    /* ----------------------  BURSAR-SPECIFIC ENDPOINTS  ------------------------- */
-
-    /**
-     * Get fee records by payment status
-     * 
-     * GET /api/students/payment-status/{status}
-     * 
-     * LEARNING: Now returns fee records instead of students
-     * Financial queries use StudentFeeRecordService
-     * 
-     * Example: GET /api/students/payment-status/ARREARS
-     * Valid statuses: PAID, PARTIALLY_PAID, ARREARS, OVERDUE
-     */
-    @GetMapping("/payment-status/{status}")
-    public ResponseEntity<List<StudentFeeRecord>> getStudentsByPaymentStatus(@PathVariable String status) {
-        log.info("REST request to get fee records with payment status: {}", status);
-        List<StudentFeeRecord> feeRecords = feeRecordService.getFeeRecordsByPaymentStatus(status);
-        return ResponseEntity.ok(feeRecords);
-    }
-
-    /**
-     * Get fee records by fee category
-     * 
-     * GET /api/students/fee-category/{category}
-     * 
-     * Example: GET /api/students/fee-category/Boarder
-     * Returns fee records for boarding students
-     */
-    @GetMapping("/fee-category/{category}")
-    public ResponseEntity<List<StudentFeeRecord>> getStudentsByFeeCategory(@PathVariable String category) {
-        log.info("REST request to get fee records with category: {}", category);
-        List<StudentFeeRecord> feeRecords = feeRecordService.getFeeRecordsByFeeCategory(category);
-        return ResponseEntity.ok(feeRecords);
-    }
-
-    /**
-     * Get students with scholarships
-     * 
-     * GET /api/students/scholarships
-     * 
-     * Returns fee records with scholarship amounts
-     */
-    @GetMapping("/scholarships")
-    public ResponseEntity<List<StudentFeeRecord>> getStudentsWithScholarships() {
-        log.info("REST request to get students with scholarships");
-        List<StudentFeeRecord> feeRecords = feeRecordService.getStudentsWithScholarships();
-        return ResponseEntity.ok(feeRecords);
-    }
-
-    /**
-     * Get students with outstanding balance
-     * 
-     * GET /api/students/outstanding-balance
-     * 
-     * Returns fee records for students who still owe money
-     */
-    @GetMapping("/outstanding-balance")
-    public ResponseEntity<List<StudentFeeRecord>> getStudentsWithOutstandingBalance() {
-        log.info("REST request to get fee records with outstanding balance");
-        List<StudentFeeRecord> feeRecords = feeRecordService.getRecordsWithOutstandingBalance();
-        return ResponseEntity.ok(feeRecords);
-    }
-
-    /**
-     * Get students who have fully paid
-     * 
-     * GET /api/students/fully-paid
-     * 
-     * Returns fee records with zero outstanding balance
-     */
-    @GetMapping("/fully-paid")
-    public ResponseEntity<List<StudentFeeRecord>> getFullyPaidStudents() {
-        log.info("REST request to get fully paid fee records");
-        List<StudentFeeRecord> feeRecords = feeRecordService.getFullyPaidRecords();
-        return ResponseEntity.ok(feeRecords);
-    }
-
-    /**
-     * Search students with arrears by name (DEPRECATED)
-     * 
-     * GET /api/students/arrears/search?name=John
-     * 
-     * NOTE: This endpoint is deprecated. Use:
-     * 1. GET /api/students/search?name=John to find students
-     * 2. GET /api/students/outstanding-balance to get arrears
-     * 3. Filter client-side or create specific endpoint if needed
-     */
-    @GetMapping("/arrears/search")
-    @Deprecated
-    public ResponseEntity<String> searchStudentsWithArrears(@RequestParam String name) {
-        log.warn("DEPRECATED endpoint called: /arrears/search");
-        return ResponseEntity.status(HttpStatus.GONE)
-            .body("This endpoint is deprecated. Use /api/students/search and /api/students/outstanding-balance separately.");
-    }
-
-    /**
-     * Get students by grade (simplified)
-     * 
-     * GET /api/students/grade/{grade}/payment-status/{status}
-     * 
-     * NOTE: Complex filtering moved to client-side or use separate queries:
-     * 1. GET /api/students/grade/{grade}
-     * 2. GET /api/students/payment-status/{status}
-     * 3. Join results client-side
-     */
-    @GetMapping("/grade/{grade}/payment-status/{status}")
-    @Deprecated
-    public ResponseEntity<String> getStudentsByGradeAndPaymentStatus(
-            @PathVariable String grade,
-            @PathVariable String status) {
-        log.warn("DEPRECATED endpoint called: /grade/{}/payment-status/{}", grade, status);
-        return ResponseEntity.status(HttpStatus.GONE)
-            .body("This endpoint is deprecated. Use /api/students/grade/ and /api/students/payment-status/ separately.");
-    }
-
-    /**
-     * Record a payment for a student
-     * 
-     * POST /api/students/{id}/payment
-     * 
-     * Body example:
-     * {
-     *   "amount": 500.00,
-     *   "paymentMethod": "MOBILE_MONEY",
-     *   "transactionReference": "MM123456",
-     *   "receivedBy": "Bursar Name",
-     *   "paymentNotes": "Tuition payment"
-     * }
-     * 
-     * LEARNING: Now creates a Payment entity
-     * - Records transaction history
-     * - Updates StudentFeeRecord automatically
-     * - Provides audit trail
-     */
-    @PostMapping("/{id}/payment")
-    public ResponseEntity<Payment> recordPayment(
-            @PathVariable Long id,
-            @RequestBody java.util.Map<String, Object> payload) {
-        log.info("REST request to record payment for student ID: {}", id);
-        
-        // Extract payment details
-        Object amountObj = payload.get("amount");
-        if (amountObj == null) {
-            return ResponseEntity.badRequest().build();
-        }
-        
-        BigDecimal amount = new BigDecimal(amountObj.toString());
-        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
-            return ResponseEntity.badRequest().build();
-        }
-        
-        // Create payment object
-        Payment payment = new Payment();
-        payment.setAmount(amount);
-        
-        // Parse payment method from string
-        String methodStr = (String) payload.getOrDefault("paymentMethod", "CASH");
-        payment.setPaymentMethod(PaymentMethod.fromString(methodStr));
-        
-        payment.setTransactionReference((String) payload.get("transactionReference"));
-        payment.setReceivedBy((String) payload.get("receivedBy"));
-        payment.setPaymentNotes((String) payload.get("paymentNotes"));
-        payment.setStatus("COMPLETED");
-        payment.setPaymentDate(LocalDateTime.now());
-        
-        try {
-            Payment savedPayment = studentService.recordPayment(id, payment);
-            return ResponseEntity.status(HttpStatus.CREATED).body(savedPayment);
-        } catch (IllegalArgumentException e) {
-            log.error("Error recording payment: {}", e.getMessage());
-            return ResponseEntity.notFound().build();
-        }
-    }
-
-    /* ----------------------  BURSAR FINANCIAL REPORTS  ------------------------- */
-
-    /**
-     * Get total outstanding fees across all students
-     * 
-     * GET /api/students/reports/total-outstanding
-     * 
-     * LEARNING: Now uses StudentFeeRecordService
-     * Returns single number: total money owed by all students
-     */
-    @GetMapping("/reports/total-outstanding")
-    public ResponseEntity<BigDecimal> getTotalOutstandingFees() {
-        log.info("REST request to get total outstanding fees");
-        BigDecimal total = feeRecordService.getTotalOutstandingFees();
-        return ResponseEntity.ok(total);
-    }
-
-    /**
-     * Get total collected fees across all students
-     * 
-     * GET /api/students/reports/total-collected
-     * 
-     * Returns single number: total money received from all students
-     */
-    @GetMapping("/reports/total-collected")
-    public ResponseEntity<BigDecimal> getTotalCollectedFees() {
-        log.info("REST request to get total collected fees");
-        BigDecimal total = feeRecordService.getTotalCollectedFees();
-        return ResponseEntity.ok(total);
-    }
-
-    /**
-     * Get count of fee records by payment status
-     * 
-     * GET /api/students/reports/count-by-payment-status?status=ARREARS
-     * 
-     * Example: How many students have arrears?
-     */
-    @GetMapping("/reports/count-by-payment-status")
-    public ResponseEntity<Long> countByPaymentStatus(@RequestParam String status) {
-        log.info("REST request to count fee records with payment status: {}", status);
-        long count = feeRecordService.countByPaymentStatus(status);
-        return ResponseEntity.ok(count);
-    }
+    
 
     /**
      * Health check endpoint

@@ -1,11 +1,14 @@
 package com.bank.schoolmanagement.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.*;
 import lombok.AllArgsConstructor;
-import lombok.Data;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
+
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
@@ -43,7 +46,8 @@ import java.util.List;
         )
     }
 )
-@Data
+@Getter
+@Setter
 @NoArgsConstructor
 @AllArgsConstructor
 @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
@@ -150,6 +154,7 @@ public class Student {
      * - Track payment history over time
      */
     @OneToOne(mappedBy = "student", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonIgnore
     private StudentFeeRecord currentFeeRecord;
 
     /**
@@ -159,6 +164,7 @@ public class Student {
      * mappedBy = "student" - Payment entity has a field called "student"
      */
     @OneToMany(mappedBy = "student", cascade = CascadeType.ALL, orphanRemoval = true)
+    @JsonIgnore
     private List<Payment> payments = new ArrayList<>();
 
     /* ----------------------  STATUS & AUDIT  ------------------------- */

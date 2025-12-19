@@ -1,6 +1,7 @@
 package com.bank.schoolmanagement.controller;
 
 import com.bank.schoolmanagement.entity.School;
+import com.bank.schoolmanagement.dto.SchoolResponse;
 import com.bank.schoolmanagement.service.SchoolService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -58,10 +59,10 @@ public class SchoolController {
      * }
      */
     @PostMapping
-    public ResponseEntity<School> onboardSchool(@Valid @RequestBody School school) {
+    public ResponseEntity<SchoolResponse> onboardSchool(@Valid @RequestBody School school) {
         try {
             School onboarded = schoolService.onboardSchool(school);
-            return ResponseEntity.status(HttpStatus.CREATED).body(onboarded);
+            return ResponseEntity.status(HttpStatus.CREATED).body(SchoolResponse.fromEntity(onboarded));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(null);
         }
@@ -77,8 +78,10 @@ public class SchoolController {
      * Use case: Bank admin dashboard - see all schools
      */
     @GetMapping
-    public ResponseEntity<List<School>> getAllActiveSchools() {
-        return ResponseEntity.ok(schoolService.getAllActiveSchools());
+    public ResponseEntity<List<SchoolResponse>> getAllActiveSchools() {
+        List<School> schools = schoolService.getAllActiveSchools();
+        List<SchoolResponse> dtos = schools.stream().map(SchoolResponse::fromEntity).toList();
+        return ResponseEntity.ok(dtos);
     }
 
     /**
@@ -87,8 +90,9 @@ public class SchoolController {
      * GET /api/schools/{id}
      */
     @GetMapping("/{id}")
-    public ResponseEntity<School> getSchoolById(@PathVariable Long id) {
+    public ResponseEntity<SchoolResponse> getSchoolById(@PathVariable Long id) {
         return schoolService.getSchoolById(id)
+            .map(SchoolResponse::fromEntity)
             .map(ResponseEntity::ok)
             .orElse(ResponseEntity.notFound().build());
     }
@@ -101,8 +105,9 @@ public class SchoolController {
      * Example: GET /api/schools/code/SCH001
      */
     @GetMapping("/code/{schoolCode}")
-    public ResponseEntity<School> getSchoolByCode(@PathVariable String schoolCode) {
+    public ResponseEntity<SchoolResponse> getSchoolByCode(@PathVariable String schoolCode) {
         return schoolService.getSchoolByCode(schoolCode)
+            .map(SchoolResponse::fromEntity)
             .map(ResponseEntity::ok)
             .orElse(ResponseEntity.notFound().build());
     }
@@ -122,13 +127,13 @@ public class SchoolController {
      * }
      */
     @PutMapping("/{id}")
-    public ResponseEntity<School> updateSchool(
+    public ResponseEntity<SchoolResponse> updateSchool(
         @PathVariable Long id,
         @RequestBody School updates
     ) {
         try {
             School updated = schoolService.updateSchool(id, updates);
-            return ResponseEntity.ok(updated);
+            return ResponseEntity.ok(SchoolResponse.fromEntity(updated));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(null);
         } catch (RuntimeException e) {
@@ -147,14 +152,14 @@ public class SchoolController {
      * }
      */
     @PostMapping("/{id}/deactivate")
-    public ResponseEntity<School> deactivateSchool(
+    public ResponseEntity<SchoolResponse> deactivateSchool(
         @PathVariable Long id,
         @RequestBody Map<String, String> request
     ) {
         try {
             String reason = request.getOrDefault("reason", "No reason provided");
             School deactivated = schoolService.deactivateSchool(id, reason);
-            return ResponseEntity.ok(deactivated);
+            return ResponseEntity.ok(SchoolResponse.fromEntity(deactivated));
         } catch (RuntimeException e) {
             return ResponseEntity.notFound().build();
         }
@@ -166,10 +171,10 @@ public class SchoolController {
      * POST /api/schools/{id}/reactivate
      */
     @PostMapping("/{id}/reactivate")
-    public ResponseEntity<School> reactivateSchool(@PathVariable Long id) {
+    public ResponseEntity<SchoolResponse> reactivateSchool(@PathVariable Long id) {
         try {
             School reactivated = schoolService.reactivateSchool(id);
-            return ResponseEntity.ok(reactivated);
+            return ResponseEntity.ok(SchoolResponse.fromEntity(reactivated));
         } catch (RuntimeException e) {
             return ResponseEntity.notFound().build();
         }
@@ -190,14 +195,14 @@ public class SchoolController {
      * Valid tiers: FREE, BASIC, PREMIUM
      */
     @PostMapping("/{id}/subscription")
-    public ResponseEntity<School> updateSubscriptionTier(
+    public ResponseEntity<SchoolResponse> updateSubscriptionTier(
         @PathVariable Long id,
         @RequestBody Map<String, String> request
     ) {
         try {
             String tier = request.get("tier");
             School updated = schoolService.updateSubscriptionTier(id, tier);
-            return ResponseEntity.ok(updated);
+            return ResponseEntity.ok(SchoolResponse.fromEntity(updated));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(null);
         } catch (RuntimeException e) {
@@ -213,8 +218,10 @@ public class SchoolController {
      * Example: GET /api/schools/subscription/PREMIUM
      */
     @GetMapping("/subscription/{tier}")
-    public ResponseEntity<List<School>> getSchoolsByTier(@PathVariable String tier) {
-        return ResponseEntity.ok(schoolService.getSchoolsByTier(tier));
+    public ResponseEntity<List<SchoolResponse>> getSchoolsByTier(@PathVariable String tier) {
+        List<School> schools = schoolService.getSchoolsByTier(tier);
+        List<SchoolResponse> dtos = schools.stream().map(SchoolResponse::fromEntity).toList();
+        return ResponseEntity.ok(dtos);
     }
 
     /**
@@ -229,8 +236,14 @@ public class SchoolController {
      * }
      */
     @GetMapping("/capacity-alerts")
-    public ResponseEntity<Map<String, List<School>>> getCapacityAlerts() {
-        return ResponseEntity.ok(schoolService.getCapacityAlerts());
+    public ResponseEntity<Map<String, List<SchoolResponse>>> getCapacityAlerts() {
+        Map<String, List<School>> raw = schoolService.getCapacityAlerts();
+        Map<String, List<SchoolResponse>> mapped = raw.entrySet().stream()
+            .collect(java.util.stream.Collectors.toMap(
+                Map.Entry::getKey,
+                e -> e.getValue().stream().map(SchoolResponse::fromEntity).toList()
+            ));
+        return ResponseEntity.ok(mapped);
     }
 
     /* ----------------------  LICENSE MANAGEMENT  ------------------------- */
@@ -246,14 +259,14 @@ public class SchoolController {
      * }
      */
     @PostMapping("/{id}/renew-license")
-    public ResponseEntity<School> renewLicense(
+    public ResponseEntity<SchoolResponse> renewLicense(
         @PathVariable Long id,
         @RequestBody Map<String, String> request
     ) {
         try {
             LocalDate expiryDate = LocalDate.parse(request.get("expiryDate"));
             School renewed = schoolService.renewLicense(id, expiryDate);
-            return ResponseEntity.ok(renewed);
+            return ResponseEntity.ok(SchoolResponse.fromEntity(renewed));
         } catch (RuntimeException e) {
             return ResponseEntity.notFound().build();
         }
@@ -265,8 +278,10 @@ public class SchoolController {
      * GET /api/schools/expired-licenses
      */
     @GetMapping("/expired-licenses")
-    public ResponseEntity<List<School>> getSchoolsWithExpiredLicenses() {
-        return ResponseEntity.ok(schoolService.getSchoolsWithExpiredLicenses());
+    public ResponseEntity<List<SchoolResponse>> getSchoolsWithExpiredLicenses() {
+        List<School> schools = schoolService.getSchoolsWithExpiredLicenses();
+        List<SchoolResponse> dtos = schools.stream().map(SchoolResponse::fromEntity).toList();
+        return ResponseEntity.ok(dtos);
     }
 
     /**
@@ -277,10 +292,12 @@ public class SchoolController {
      * Query param: days (default 30)
      */
     @GetMapping("/expiring-licenses")
-    public ResponseEntity<List<School>> getSchoolsWithExpiringLicenses(
+    public ResponseEntity<List<SchoolResponse>> getSchoolsWithExpiringLicenses(
         @RequestParam(defaultValue = "30") int days
     ) {
-        return ResponseEntity.ok(schoolService.getSchoolsWithExpiringLicenses(days));
+        List<School> schools = schoolService.getSchoolsWithExpiringLicenses(days);
+        List<SchoolResponse> dtos = schools.stream().map(SchoolResponse::fromEntity).toList();
+        return ResponseEntity.ok(dtos);
     }
 
     /**
@@ -292,9 +309,10 @@ public class SchoolController {
      * Returns list of schools that were deactivated
      */
     @PostMapping("/deactivate-expired")
-    public ResponseEntity<List<School>> deactivateExpiredLicenses() {
+    public ResponseEntity<List<SchoolResponse>> deactivateExpiredLicenses() {
         List<School> deactivated = schoolService.deactivateExpiredLicenses();
-        return ResponseEntity.ok(deactivated);
+        List<SchoolResponse> dtos = deactivated.stream().map(SchoolResponse::fromEntity).toList();
+        return ResponseEntity.ok(dtos);
     }
 
     /* ----------------------  RELATIONSHIP MANAGER  ------------------------- */
@@ -307,10 +325,12 @@ public class SchoolController {
      * Example: GET /api/schools/manager/John%20Doe
      */
     @GetMapping("/manager/{managerName}")
-    public ResponseEntity<List<School>> getSchoolsByRelationshipManager(
+    public ResponseEntity<List<SchoolResponse>> getSchoolsByRelationshipManager(
         @PathVariable String managerName
     ) {
-        return ResponseEntity.ok(schoolService.getSchoolsByRelationshipManager(managerName));
+        List<School> schools = schoolService.getSchoolsByRelationshipManager(managerName);
+        List<SchoolResponse> dtos = schools.stream().map(SchoolResponse::fromEntity).toList();
+        return ResponseEntity.ok(dtos);
     }
 
     /**
@@ -325,7 +345,7 @@ public class SchoolController {
      * }
      */
     @PostMapping("/{id}/assign-manager")
-    public ResponseEntity<School> assignRelationshipManager(
+    public ResponseEntity<SchoolResponse> assignRelationshipManager(
         @PathVariable Long id,
         @RequestBody Map<String, String> request
     ) {
@@ -333,7 +353,7 @@ public class SchoolController {
             String managerName = request.get("managerName");
             String managerPhone = request.get("managerPhone");
             School updated = schoolService.assignRelationshipManager(id, managerName, managerPhone);
-            return ResponseEntity.ok(updated);
+            return ResponseEntity.ok(SchoolResponse.fromEntity(updated));
         } catch (RuntimeException e) {
             return ResponseEntity.notFound().build();
         }
@@ -366,8 +386,10 @@ public class SchoolController {
      * Case-insensitive, partial match
      */
     @GetMapping("/search")
-    public ResponseEntity<List<School>> searchSchools(@RequestParam String name) {
-        return ResponseEntity.ok(schoolService.searchSchoolsByName(name));
+    public ResponseEntity<List<SchoolResponse>> searchSchools(@RequestParam String name) {
+        List<School> schools = schoolService.searchSchoolsByName(name);
+        List<SchoolResponse> dtos = schools.stream().map(SchoolResponse::fromEntity).toList();
+        return ResponseEntity.ok(dtos);
     }
 
     /**
@@ -378,8 +400,10 @@ public class SchoolController {
      * Valid types: PRIMARY, SECONDARY, COMBINED
      */
     @GetMapping("/type/{type}")
-    public ResponseEntity<List<School>> getSchoolsByType(@PathVariable String type) {
-        return ResponseEntity.ok(schoolService.getSchoolsByType(type));
+    public ResponseEntity<List<SchoolResponse>> getSchoolsByType(@PathVariable String type) {
+        List<School> schools = schoolService.getSchoolsByType(type);
+        List<SchoolResponse> dtos = schools.stream().map(SchoolResponse::fromEntity).toList();
+        return ResponseEntity.ok(dtos);
     }
 
     /**
@@ -390,8 +414,10 @@ public class SchoolController {
      * Example: GET /api/schools/city/Harare
      */
     @GetMapping("/city/{city}")
-    public ResponseEntity<List<School>> getSchoolsByCity(@PathVariable String city) {
-        return ResponseEntity.ok(schoolService.getSchoolsByCity(city));
+    public ResponseEntity<List<SchoolResponse>> getSchoolsByCity(@PathVariable String city) {
+        List<School> schools = schoolService.getSchoolsByCity(city);
+        List<SchoolResponse> dtos = schools.stream().map(SchoolResponse::fromEntity).toList();
+        return ResponseEntity.ok(dtos);
     }
 
     /**
@@ -402,8 +428,10 @@ public class SchoolController {
      * Example: GET /api/schools/province/Harare
      */
     @GetMapping("/province/{province}")
-    public ResponseEntity<List<School>> getSchoolsByProvince(@PathVariable String province) {
-        return ResponseEntity.ok(schoolService.getSchoolsByProvince(province));
+    public ResponseEntity<List<SchoolResponse>> getSchoolsByProvince(@PathVariable String province) {
+        List<School> schools = schoolService.getSchoolsByProvince(province);
+        List<SchoolResponse> dtos = schools.stream().map(SchoolResponse::fromEntity).toList();
+        return ResponseEntity.ok(dtos);
     }
 
     /* ----------------------  STATISTICS & ANALYTICS  ------------------------- */
@@ -460,7 +488,9 @@ public class SchoolController {
      * GET /api/schools/recent
      */
     @GetMapping("/recent")
-    public ResponseEntity<List<School>> getRecentlyOnboardedSchools() {
-        return ResponseEntity.ok(schoolService.getRecentlyOnboardedSchools());
+    public ResponseEntity<List<SchoolResponse>> getRecentlyOnboardedSchools() {
+        List<School> schools = schoolService.getRecentlyOnboardedSchools();
+        List<SchoolResponse> dtos = schools.stream().map(SchoolResponse::fromEntity).toList();
+        return ResponseEntity.ok(dtos);
     }
 }

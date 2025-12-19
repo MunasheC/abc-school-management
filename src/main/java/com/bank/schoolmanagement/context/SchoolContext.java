@@ -148,10 +148,21 @@ public class SchoolContext {
      */
     public static void validateSchoolAccess(School entitySchool) {
         School currentSchool = getCurrentSchool();
-        
-        if (!currentSchool.equals(entitySchool)) {
+        // Prefer comparing by database ID when available (robust across detached/proxy instances)
+        if (currentSchool.getId() != null && entitySchool != null && entitySchool.getId() != null) {
+            if (!currentSchool.getId().equals(entitySchool.getId())) {
+                throw new SecurityException(
+                    "Access denied: Entity belongs to school " + entitySchool.getSchoolCode() + 
+                    ", current school is " + currentSchool.getSchoolCode()
+                );
+            }
+            return;
+        }
+
+        // Fallback: compare by school code (useful for tests or transient objects)
+        if (entitySchool == null || !currentSchool.getSchoolCode().equals(entitySchool.getSchoolCode())) {
             throw new SecurityException(
-                "Access denied: Entity belongs to school " + entitySchool.getSchoolCode() + 
+                "Access denied: Entity belongs to school " + (entitySchool != null ? entitySchool.getSchoolCode() : "<null>") + 
                 ", current school is " + currentSchool.getSchoolCode()
             );
         }
