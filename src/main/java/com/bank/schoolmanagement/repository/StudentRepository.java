@@ -185,21 +185,25 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
     Optional<Student> findByIdWithGuardian(@Param("id") Long id);
 
     /**
-     * Find student with fee record loaded
+     * Find student with fee records loaded
+     * 
+     * NOTE: Changed from currentFeeRecord to feeRecords (OneToMany relationship)
      */
-    @Query("SELECT s FROM Student s LEFT JOIN FETCH s.currentFeeRecord WHERE s.id = :id")
+    @Query("SELECT s FROM Student s LEFT JOIN FETCH s.feeRecords WHERE s.id = :id")
     Optional<Student> findByIdWithFeeRecord(@Param("id") Long id);
 
     /**
-     * Find student with all relationships loaded (guardian + fee record + payments)
+     * Find student with all relationships loaded (guardian + fee records + payments)
      * 
      * LEARNING: Multiple JOIN FETCH
      * - Loads everything in one query
-     * - Use carefully - can be slow if student has many payments
+     * - Use carefully - can be slow if student has many payments/fee records
+     * 
+     * NOTE: Changed from currentFeeRecord to feeRecords (OneToMany relationship)
      */
     @Query("SELECT DISTINCT s FROM Student s " +
            "LEFT JOIN FETCH s.guardian " +
-           "LEFT JOIN FETCH s.currentFeeRecord " +
+           "LEFT JOIN FETCH s.feeRecords " +
            "LEFT JOIN FETCH s.payments " +
            "WHERE s.id = :id")
     Optional<Student> findByIdWithAllRelationships(@Param("id") Long id);
@@ -291,6 +295,17 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
     long countBySchoolAndGrade(com.bank.schoolmanagement.entity.School school, String grade);
 
     /**
+     * Find active students by school and grade
+     * 
+     * USAGE: Bulk promotion - get all active students in a grade
+     * Example: Get all Form 1 students to promote to Form 2
+     */
+    List<Student> findBySchoolAndGradeAndIsActiveTrue(
+        com.bank.schoolmanagement.entity.School school,
+        String grade
+    );
+
+    /**
      * Count students by school and class name
      */
     long countBySchoolAndClassName(com.bank.schoolmanagement.entity.School school, String className);
@@ -335,6 +350,19 @@ public interface StudentRepository extends JpaRepository<Student, Long> {
     boolean existsBySchoolAndStudentId(
         com.bank.schoolmanagement.entity.School school,
         String studentId
+    );
+    
+    /**
+     * Find all students by school and active status
+     * 
+     * USAGE: Year-end promotion - get ALL active students to take snapshot
+     * This creates the basis for atomic bulk operations
+     * 
+     * Spring generates: SELECT * FROM students WHERE school_id = ? AND is_active = ?
+     */
+    List<Student> findBySchoolAndIsActive(
+        com.bank.schoolmanagement.entity.School school,
+        Boolean isActive
     );
     
 }

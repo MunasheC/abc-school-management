@@ -145,17 +145,36 @@ public class Student {
     private Guardian guardian;
 
     /**
-     * Relationship to Fee Record
+     * Relationship to Fee Records (UPDATED: Now supports multiple records)
      * 
-     * @OneToOne - One student has one current fee record
+     * @OneToMany - One student has many fee records (one per term/year)
+     * mappedBy = "student" - StudentFeeRecord entity has a field called "student"
      * 
-     * LEARNING: In future, could change to @OneToMany for historical records
-     * - Keep separate fee record for each term/year
-     * - Track payment history over time
+     * CHANGE: Previously @OneToOne, now @OneToMany
+     * - Supports historical fee records
+     * - Track fees across multiple terms/years
+     * - Each promotion creates new fee record
+     * 
+     * NOTE: For backward compatibility, use getLatestFeeRecord() to get current term
      */
-    @OneToOne(mappedBy = "student", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OneToMany(mappedBy = "student", cascade = CascadeType.ALL, orphanRemoval = true)
     @JsonIgnore
-    private StudentFeeRecord currentFeeRecord;
+    private List<StudentFeeRecord> feeRecords = new ArrayList<>();
+    
+    /**
+     * Helper method to get the most recent fee record
+     * @deprecated Use StudentFeeRecordService.getLatestFeeRecordForStudent() instead
+     */
+    @Deprecated
+    public StudentFeeRecord getCurrentFeeRecord() {
+        if (feeRecords == null || feeRecords.isEmpty()) {
+            return null;
+        }
+        // Return the most recently created fee record
+        return feeRecords.stream()
+            .max((f1, f2) -> f1.getCreatedAt().compareTo(f2.getCreatedAt()))
+            .orElse(null);
+    }
 
     /**
      * Relationship to Payments
@@ -171,6 +190,23 @@ public class Student {
 
     @Column(name = "is_active")
     private Boolean isActive = true;
+    
+    /**
+     * Academic completion status
+     * 
+     * VALUES:
+     * - null or "ACTIVE" - Currently enrolled
+     * - "COMPLETED_PRIMARY" - Finished Grade 7 (primary school)
+     * - "COMPLETED_O_LEVEL" - Finished Form 4 (O Level)
+     * - "COMPLETED_A_LEVEL" - Finished Form 6 (A Level)
+     * 
+     * LEARNING: Track student's academic milestone completion
+     * - Primary schools: Student completes at Grade 7
+     * - Secondary schools: Student completes O Level at Form 4, A Level at Form 6
+     * - Used to prevent further promotions after completion
+     */
+    @Column(name = "completion_status")
+    private String completionStatus;
 
     @Column(name = "withdrawal_date")
     private LocalDate withdrawalDate;
@@ -227,27 +263,30 @@ public class Student {
      * Delegates to fee record
      */
     public boolean hasOutstandingBalance() {
-        return currentFeeRecord != null && !currentFeeRecord.isFullyPaid();
+        StudentFeeRecord current = getCurrentFeeRecord();
+        return current != null && !current.isFullyPaid();
     }
 
     /**
      * Get outstanding balance amount
      */
     public java.math.BigDecimal getOutstandingBalance() {
-        if (currentFeeRecord == null) {
+        StudentFeeRecord current = getCurrentFeeRecord();
+        if (current == null) {
             return java.math.BigDecimal.ZERO;
         }
-        return currentFeeRecord.getOutstandingBalance();
+        return current.getOutstandingBalance();
     }
 
     /**
      * Get payment status
      */
     public String getPaymentStatus() {
-        if (currentFeeRecord == null) {
-            return "NO_FEES";
+        StudentFeeRecord current = getCurrentFeeRecord();
+        if (current == null) {
+            return "NO_FEE_RECORD";
         }
-        return currentFeeRecord.getPaymentStatus();
+        return current.getPaymentStatus();
     }
 
     /**

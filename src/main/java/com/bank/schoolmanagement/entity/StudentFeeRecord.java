@@ -57,12 +57,17 @@ public class StudentFeeRecord {
     /**
      * Relationship to student
      * 
-     * @OneToOne - One fee record belongs to one student
+     * @ManyToOne - Many fee records can belong to one student (one per term/year)
      * @JoinColumn - Creates a foreign key column "student_id"
+     * 
+     * CHANGE: Previously @OneToOne, now @ManyToOne to support historical records
+     * - One student can have multiple fee records
+     * - Each fee record represents a different term/year
+     * - Enables full financial history tracking
      */
-    @OneToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "student_id", nullable = false)
-    @JsonIgnoreProperties({"school", "guardian", "hibernateLazyInitializer", "handler"})
+    @JsonIgnoreProperties({"school", "guardian", "feeRecords", "hibernateLazyInitializer", "handler"})
     private Student student;
 
     /** Academic term/year for this fee record */

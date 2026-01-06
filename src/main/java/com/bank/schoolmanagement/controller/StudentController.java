@@ -1,10 +1,14 @@
 
 package com.bank.schoolmanagement.controller;
 
+import com.bank.schoolmanagement.dto.BulkPromotionSummary;
+import com.bank.schoolmanagement.dto.StudentPromotionRequest;
 import com.bank.schoolmanagement.dto.UploadSummary;
 import com.bank.schoolmanagement.entity.Student;
+import com.bank.schoolmanagement.entity.StudentFeeRecord;
 import com.bank.schoolmanagement.dto.StudentResponse;
 import com.bank.schoolmanagement.service.ExcelService;
+import com.bank.schoolmanagement.service.StudentFeeRecordService;
 import com.bank.schoolmanagement.service.StudentService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -63,6 +67,7 @@ public class StudentController {
 
     private final StudentService studentService;
     private final ExcelService excelService;
+    private final StudentFeeRecordService feeRecordService;
     
 
     /**
@@ -391,6 +396,612 @@ public class StudentController {
             return ResponseEntity
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body("Error processing file: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * PROMOTE - Promote individual student to next grade
+     * 
+     * POST /api/school/students/{id}/promote
+     * 
+     * PURPOSE: Handle grade progression for individual student
+     * - Updates student's grade and className
+     * - Creates new fee record for new academic year
+     * - Optionally carries forward outstanding balance
+     * 
+     * LEARNING: Promotion workflow
+     * 1. Update student academic info (grade, class)
+     * 2. Get current fee record to check outstanding balance
+     * 3. Create new fee record for new term/year
+     * 4. Audit trail captures before/after states
+     * 
+     * Example Usage: Promote Tanaka from Form 1 to Form 2 for 2026
+     * 
+     * @param id Student database ID
+     * @param promotionRequest Promotion details and new fee structure
+     * @return Promoted student with new fee record details
+     */
+    @PostMapping("/{id}/promote")
+    @Operation(
+        summary = "Promote student to next grade",
+        description = "Updates student grade/class and creates new fee record for new academic year. Optionally carries forward outstanding balance."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Student promoted successfully"),
+        @ApiResponse(responseCode = "400", description = "Invalid promotion request"),
+        @ApiResponse(responseCode = "404", description = "Student not found")
+    })
+    public ResponseEntity<?> promoteStudent(
+            @PathVariable Long id,
+            @RequestBody StudentPromotionRequest promotionRequest) {
+        
+        try {
+            log.info("Promoting student ID {} to grade: {}, term: {}", 
+                id, promotionRequest.getNewGrade(), promotionRequest.getNewTermYear());
+            
+            // 1. Get current fee record to check outstanding balance
+            final java.math.BigDecimal previousBalance;
+            if (Boolean.TRUE.equals(promotionRequest.getCarryForwardBalance())) {
+                java.util.Optional<StudentFeeRecord> currentFeeRecord = 
+                    feeRecordService.getLatestFeeRecordForStudent(id);
+                
+                if (currentFeeRecord.isPresent() && 
+                    currentFeeRecord.get().getOutstandingBalance() != null) {
+                    previousBalance = currentFeeRecord.get().getOutstandingBalance();
+                    log.info("Carrying forward balance: {} for student ID: {}", previousBalance, id);
+                } else {
+                    previousBalance = java.math.BigDecimal.ZERO;
+                }
+            } else {
+                previousBalance = java.math.BigDecimal.ZERO;
+            }
+            
+            // 2. Promote student (update grade and className)
+            Student promotedStudent = studentService.promoteStudent(
+                id,
+                promotionRequest.getNewGrade(),
+                promotionRequest.getNewClassName(),
+                promotionRequest.getPromotionNotes()
+            );
+            
+            // 3. Create new fee record for promoted grade/term
+            StudentFeeRecord newFeeRecord = feeRecordService.createPromotionFeeRecord(
+                promotedStudent,
+                promotionRequest.getNewTermYear(),
+                previousBalance,
+                promotionRequest.getTuitionFee(),
+                promotionRequest.getBoardingFee(),
+                promotionRequest.getDevelopmentLevy(),
+                promotionRequest.getExamFee(),
+                promotionRequest.getOtherFees(),
+                promotionRequest.getScholarshipAmount(),
+                promotionRequest.getSiblingDiscount(),
+                promotionRequest.getFeeCategory()
+            );
+            
+            // 4. Build response with student and fee details
+            String message = String.format(
+                "Student %s %s promoted from %s to %s. New fee record created for %s. Outstanding balance: %s",
+                promotedStudent.getFirstName(),
+                promotedStudent.getLastName(),
+                promotionRequest.getNewGrade(), // We don't have old grade here, using new for now
+                promotedStudent.getGrade(),
+                promotionRequest.getNewTermYear(),
+                newFeeRecord.getOutstandingBalance()
+            );
+            
+            return ResponseEntity.ok(new java.util.HashMap<String, Object>() {{
+                put("message", message);
+                put("student", StudentResponse.fromEntity(promotedStudent));
+                put("newFeeRecord", new java.util.HashMap<String, Object>() {{
+                    put("id", newFeeRecord.getId());
+                    put("termYear", newFeeRecord.getTermYear());
+                    put("netAmount", newFeeRecord.getNetAmount());
+                    put("previousBalance", previousBalance);
+                    put("outstandingBalance", newFeeRecord.getOutstandingBalance());
+                    put("paymentStatus", newFeeRecord.getPaymentStatus());
+                }});
+            }});
+            
+        } catch (IllegalArgumentException e) {
+            log.error("Invalid promotion request: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(e.getMessage());
+        } catch (Exception e) {
+            log.error("Error promoting student ID {}: {}", id, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body("Error promoting student: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * PROMOTE STUDENT BY STUDENT ID - Promote individual student using school's student reference
+     * 
+     * POST /api/school/students/by-reference/{studentId}/promote
+     * 
+     * DIFFERENCE FROM DATABASE ID ENDPOINT:
+     * - Uses studentId (school's reference like "STU-F1-0001") instead of database ID
+     * - Automatically scopes to current school context
+     * - More intuitive for school users who know student references
+     * 
+     * Example: POST /api/school/students/by-studentID/STU-F1-0001/promote
+     */
+    @PostMapping("/by-studentID/{studentId}/promote")
+    @Operation(
+        summary = "Promote student by Student ID",
+        description = "Promotes a student to next grade using their student reference ID (not database ID). " +
+                      "Updates grade/class and creates new fee record. Automatically scoped to current school."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Student promoted successfully"),
+        @ApiResponse(responseCode = "400", description = "Invalid promotion request"),
+        @ApiResponse(responseCode = "404", description = "Student not found in current school")
+    })
+    public ResponseEntity<?> promoteStudentByStudentId(
+            @Parameter(description = "Student's reference ID (e.g., 'STU2025001', '2025001')", required = true)
+            @PathVariable String studentId,
+            @Valid @RequestBody StudentPromotionRequest promotionRequest) {
+        
+        try {
+            log.info("Promoting student {} to grade: {}, term: {}", 
+                studentId, promotionRequest.getNewGrade(), promotionRequest.getNewTermYear());
+            
+            // 1. Find student by studentId in current school context
+            java.util.Optional<Student> studentOpt = studentService.getStudentByStudentId(studentId);
+            if (!studentOpt.isPresent()) {
+                log.error("Student with ID {} not found in current school", studentId);
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body("Student with ID " + studentId + " not found in current school");
+            }
+            
+            Student student = studentOpt.get();
+            String oldGrade = student.getGrade();
+            
+            // 2. Get current fee record to check outstanding balance
+            final java.math.BigDecimal previousBalance;
+            if (Boolean.TRUE.equals(promotionRequest.getCarryForwardBalance())) {
+                java.util.Optional<StudentFeeRecord> currentFeeRecord = 
+                    feeRecordService.getLatestFeeRecordForStudent(student.getId());
+                
+                if (currentFeeRecord.isPresent() && 
+                    currentFeeRecord.get().getOutstandingBalance() != null) {
+                    previousBalance = currentFeeRecord.get().getOutstandingBalance();
+                    log.info("Carrying forward balance: {} for student {}", previousBalance, studentId);
+                } else {
+                    previousBalance = java.math.BigDecimal.ZERO;
+                }
+            } else {
+                previousBalance = java.math.BigDecimal.ZERO;
+            }
+            
+            // 3. Promote student (update grade and className)
+            Student promotedStudent = studentService.promoteStudent(
+                student.getId(),
+                promotionRequest.getNewGrade(),
+                promotionRequest.getNewClassName(),
+                promotionRequest.getPromotionNotes()
+            );
+            
+            // 4. Create new fee record for promoted grade/term
+            StudentFeeRecord newFeeRecord = feeRecordService.createPromotionFeeRecord(
+                promotedStudent,
+                promotionRequest.getNewTermYear(),
+                previousBalance,
+                promotionRequest.getTuitionFee(),
+                promotionRequest.getBoardingFee(),
+                promotionRequest.getDevelopmentLevy(),
+                promotionRequest.getExamFee(),
+                promotionRequest.getOtherFees(),
+                promotionRequest.getScholarshipAmount(),
+                promotionRequest.getSiblingDiscount(),
+                promotionRequest.getFeeCategory()
+            );
+            
+            // 5. Build response with student and fee details
+            String message = String.format(
+                "Student %s %s (ID: %s) promoted from %s to %s. New fee record created for %s. Outstanding balance: $%.2f",
+                promotedStudent.getFirstName(),
+                promotedStudent.getLastName(),
+                studentId,
+                oldGrade,
+                promotedStudent.getGrade(),
+                promotionRequest.getNewTermYear(),
+                newFeeRecord.getOutstandingBalance()
+            );
+            
+            return ResponseEntity.ok(new java.util.HashMap<String, Object>() {{
+                put("message", message);
+                put("student", StudentResponse.fromEntity(promotedStudent));
+                put("oldGrade", oldGrade);
+                put("newGrade", promotedStudent.getGrade());
+                put("newFeeRecord", new java.util.HashMap<String, Object>() {{
+                    put("id", newFeeRecord.getId());
+                    put("termYear", newFeeRecord.getTermYear());
+                    put("netAmount", newFeeRecord.getNetAmount());
+                    put("previousBalance", previousBalance);
+                    put("outstandingBalance", newFeeRecord.getOutstandingBalance());
+                    put("paymentStatus", newFeeRecord.getPaymentStatus());
+                }});
+            }});
+            
+        } catch (IllegalArgumentException e) {
+            log.error("Invalid promotion request for student {}: {}", studentId, e.getMessage());
+            return ResponseEntity.badRequest().body(e.getMessage());
+        } catch (Exception e) {
+            log.error("Error promoting student {}: {}", studentId, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body("Error promoting student: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * DEMOTE - Demote student back to previous grade (for repeating students)
+     * 
+     * POST /api/school/students/{id}/demote
+     * 
+     * PURPOSE: Revert incorrectly promoted student or mark as repeating
+     * 
+     * USE CASE: After automatic year-end promotion, admin realizes student
+     * should be repeating the grade due to failed exams or other reasons
+     * 
+     * FEATURES:
+     * - Demotes student back to specified grade
+     * - Clears completion status if student was marked as completed
+     * - Reactivates student if they were deactivated
+     * - Creates new fee record for repeated grade
+     * - Optionally carries forward outstanding balance
+     * 
+     * Example: Student auto-promoted Form 1→Form 2, but should repeat Form 1
+     * 
+     * @param id Student database ID
+     * @param demotionRequest Demotion details and fee structure
+     * @return Demoted student with new fee record details
+     */
+    @PostMapping("/{id}/demote")
+    @Operation(
+        summary = "Demote student back to previous grade",
+        description = "Reverts student to a previous grade (e.g., for repeating students). Creates new fee record for repeated grade. Clears completion status and reactivates if needed."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Student demoted successfully"),
+        @ApiResponse(responseCode = "400", description = "Invalid demotion request"),
+        @ApiResponse(responseCode = "404", description = "Student not found")
+    })
+    public ResponseEntity<?> demoteStudent(
+            @PathVariable Long id,
+            @RequestBody com.bank.schoolmanagement.dto.StudentDemotionRequest demotionRequest) {
+        
+        try {
+            log.info("Demoting student ID {} back to grade: {}, term: {}", 
+                id, demotionRequest.getDemotedGrade(), demotionRequest.getAcademicYear());
+            
+            // 1. Get current student state
+            Student student = studentService.getStudentByIdForCurrentSchool(id)
+                .orElseThrow(() -> new IllegalArgumentException("Student not found: " + id));
+            String oldGrade = student.getGrade();
+            
+            // 2. Get current fee record to check outstanding balance
+            final java.math.BigDecimal previousBalance;
+            if (demotionRequest.getCarryForwardBalance()) {
+                java.util.Optional<StudentFeeRecord> currentFeeRecord = 
+                    feeRecordService.getLatestFeeRecordForStudent(id);
+                
+                if (currentFeeRecord.isPresent() && 
+                    currentFeeRecord.get().getOutstandingBalance() != null) {
+                    previousBalance = currentFeeRecord.get().getOutstandingBalance();
+                    log.info("Carrying forward balance: {} for student {}", previousBalance, id);
+                } else {
+                    previousBalance = java.math.BigDecimal.ZERO;
+                }
+            } else {
+                previousBalance = java.math.BigDecimal.ZERO;
+            }
+            
+            // 3. Demote student (update grade, clear completion status, reactivate)
+            Student demotedStudent = studentService.demoteStudent(
+                id,
+                demotionRequest.getDemotedGrade(),
+                demotionRequest.getDemotedClassName(),
+                demotionRequest.getReason()
+            );
+            
+            // 4. Create new fee record for repeated grade
+            StudentFeeRecord newFeeRecord = feeRecordService.createPromotionFeeRecord(
+                demotedStudent,
+                demotionRequest.getAcademicYear(),
+                previousBalance,
+                demotionRequest.getTuitionFee(),
+                demotionRequest.getBoardingFee(),
+                demotionRequest.getDevelopmentLevy(),
+                demotionRequest.getExamFee(),
+                demotionRequest.getOtherFees(),
+                java.math.BigDecimal.ZERO, // scholarshipAmount
+                java.math.BigDecimal.ZERO, // siblingDiscount
+                null // feeCategory
+            );
+            
+            // 5. Build response with student and fee details
+            String message = String.format(
+                "Student %s %s (ID: %s) demoted from %s back to %s. Reason: %s. New fee record created for %s. Outstanding balance: $%.2f",
+                demotedStudent.getFirstName(),
+                demotedStudent.getLastName(),
+                id,
+                oldGrade,
+                demotedStudent.getGrade(),
+                demotionRequest.getReason(),
+                demotionRequest.getAcademicYear(),
+                newFeeRecord.getOutstandingBalance()
+            );
+            
+            return ResponseEntity.ok(new java.util.HashMap<String, Object>() {{
+                put("message", message);
+                put("student", StudentResponse.fromEntity(demotedStudent));
+                put("oldGrade", oldGrade);
+                put("demotedGrade", demotedStudent.getGrade());
+                put("reason", demotionRequest.getReason());
+                put("newFeeRecord", new java.util.HashMap<String, Object>() {{
+                    put("id", newFeeRecord.getId());
+                    put("termYear", newFeeRecord.getTermYear());
+                    put("netAmount", newFeeRecord.getNetAmount());
+                    put("previousBalance", previousBalance);
+                    put("outstandingBalance", newFeeRecord.getOutstandingBalance());
+                    put("paymentStatus", newFeeRecord.getPaymentStatus());
+                }});
+            }});
+            
+        } catch (IllegalArgumentException e) {
+            log.error("Invalid demotion request for student {}: {}", id, e.getMessage());
+            return ResponseEntity.badRequest().body(e.getMessage());
+        } catch (Exception e) {
+            log.error("Error demoting student {}: {}", id, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body("Error demoting student: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * BULK PROMOTE - Promote all students in a grade
+     * 
+     * POST /api/school/students/bulk-promote
+     * 
+     * PURPOSE: Year-end mass promotion (e.g., all Form 1 → Form 2)
+     * 
+     * LEARNING: Bulk promotion workflow
+     * - Promotes entire grade at once
+     * - Each student gets individual promotion logic applied
+     * - Continues on errors (partial success possible)
+     * - Returns detailed summary of successes and failures
+     * 
+     * Example: Promote all Form 1 students to Form 2 for Term 1 2026
+     * 
+     * Request Body:
+     * {
+     *   "currentGrade": "Form 1",
+     *   "newGrade": "Form 2",
+     *   "newClassName": null,  // Will keep their current class names
+     *   "newTermYear": "Term 1 2026",
+     *   "carryForwardBalance": true,
+     *   "tuitionFee": 600.00,
+     *   "boardingFee": 350.00,
+     *   ...
+     * }
+     */
+    @PostMapping("/bulk-promote")
+    @Operation(
+        summary = "Bulk promote students by grade",
+        description = "Promotes all active students in a specified grade to the next grade. Creates new fee records for new academic year."
+    )
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Bulk promotion completed (check summary for individual results)"),
+        @ApiResponse(responseCode = "400", description = "Invalid bulk promotion request")
+    })
+    public ResponseEntity<?> bulkPromoteStudents(
+            @RequestParam String currentGrade,
+            @RequestBody StudentPromotionRequest promotionRequest) {
+        
+        try {
+            log.info("Starting bulk promotion: {} → {}, Term: {}", 
+                currentGrade, promotionRequest.getNewGrade(), promotionRequest.getNewTermYear());
+            
+            // Get all students in the current grade
+            java.util.List<Student> studentsToPromote = 
+                studentService.getStudentsByGradeForPromotion(currentGrade);
+            
+            if (studentsToPromote.isEmpty()) {
+                log.warn("No active students found in grade: {}", currentGrade);
+                return ResponseEntity.badRequest()
+                    .body("No active students found in grade: " + currentGrade);
+            }
+            
+            // Initialize summary
+            BulkPromotionSummary summary = new BulkPromotionSummary();
+            summary.setTotalStudents(studentsToPromote.size());
+            summary.setSuccessCount(0);
+            summary.setFailureCount(0);
+            
+            // Process each student
+            for (Student student : studentsToPromote) {
+                try {
+                    // Get previous balance if carrying forward
+                    java.math.BigDecimal previousBalance = java.math.BigDecimal.ZERO;
+                    if (Boolean.TRUE.equals(promotionRequest.getCarryForwardBalance())) {
+                        java.util.Optional<StudentFeeRecord> currentFeeRecord = 
+                            feeRecordService.getLatestFeeRecordForStudent(student.getId());
+                        
+                        if (currentFeeRecord.isPresent() && 
+                            currentFeeRecord.get().getOutstandingBalance() != null) {
+                            previousBalance = currentFeeRecord.get().getOutstandingBalance();
+                        }
+                    }
+                    
+                    // Promote student
+                    String newClassName = promotionRequest.getNewClassName() != null 
+                        ? promotionRequest.getNewClassName() 
+                        : student.getClassName(); // Keep current class if not specified
+                    
+                    Student promoted = studentService.promoteStudent(
+                        student.getId(),
+                        promotionRequest.getNewGrade(),
+                        newClassName,
+                        "Bulk promotion from " + currentGrade + " to " + promotionRequest.getNewGrade()
+                    );
+                    
+                    // Create new fee record
+                    feeRecordService.createPromotionFeeRecord(
+                        promoted,
+                        promotionRequest.getNewTermYear(),
+                        previousBalance,
+                        promotionRequest.getTuitionFee(),
+                        promotionRequest.getBoardingFee(),
+                        promotionRequest.getDevelopmentLevy(),
+                        promotionRequest.getExamFee(),
+                        promotionRequest.getOtherFees(),
+                        promotionRequest.getScholarshipAmount(),
+                        promotionRequest.getSiblingDiscount(),
+                        promotionRequest.getFeeCategory()
+                    );
+                    
+                    // Success
+                    summary.setSuccessCount(summary.getSuccessCount() + 1);
+                    summary.getPromotedStudentIds().add(promoted.getStudentId());
+                    
+                    log.debug("Successfully promoted: {} {} ({})", 
+                        student.getFirstName(), student.getLastName(), student.getStudentId());
+                    
+                } catch (Exception e) {
+                    // Error with individual student - log and continue
+                    summary.setFailureCount(summary.getFailureCount() + 1);
+                    summary.getErrors().add(new BulkPromotionSummary.PromotionError(
+                        student.getId(),
+                        student.getFirstName() + " " + student.getLastName(),
+                        e.getMessage()
+                    ));
+                    
+                    log.error("Failed to promote student {} {}: {}", 
+                        student.getFirstName(), student.getLastName(), e.getMessage());
+                }
+            }
+            
+            // Set summary message
+            summary.setMessage(String.format(
+                "Bulk promotion completed: %d of %d students promoted from %s to %s",
+                summary.getSuccessCount(),
+                summary.getTotalStudents(),
+                currentGrade,
+                promotionRequest.getNewGrade()
+            ));
+            
+            log.info("Bulk promotion complete: {} succeeded, {} failed", 
+                summary.getSuccessCount(), summary.getFailureCount());
+            
+            return ResponseEntity.ok(summary);
+            
+        } catch (Exception e) {
+            log.error("Error in bulk promotion: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body("Error in bulk promotion: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * YEAR-END PROMOTION - Atomic promotion of all grades simultaneously
+     * 
+     * POST /api/school/students/year-end-promotion
+     * 
+     * CRITICAL: This endpoint prevents the double-promotion bug by processing all grades
+     * in a single atomic operation. All students are promoted based on their INITIAL grade,
+     * not their updated grade.
+     * 
+     * EXAMPLE: If you promote:
+     * - Form 1 students → Form 2
+     * - Form 2 students → Form 3
+     * - Form 3 students → Form 4
+     * 
+     * The newly promoted Form 2 students will NOT be promoted again to Form 3
+     * because the snapshot is taken before any changes.
+     * 
+     * FEATURES:
+     * - School-type-aware progression (Primary uses Grades, Secondary uses Forms)
+     * - Completion tracking (COMPLETED_PRIMARY, COMPLETED_O_LEVEL, COMPLETED_A_LEVEL)
+     * - Excluded students (can skip specific students who are repeating)
+     * - Grade-specific fee structures
+     * - Carry forward outstanding balances
+     * 
+     * Request Body Example:
+     * {
+     *   "newAcademicYear": "2026",
+     *   "carryForwardBalances": true,
+     *   "excludedStudentIds": [123, 456],
+     *   "promotionNotes": "Year-end promotion 2025 → 2026",
+     *   "feeStructures": {
+     *     "Form 2": {
+     *       "tuitionFee": 500.00,
+     *       "examinationFee": 50.00,
+     *       "otherFees": 25.00
+     *     },
+     *     "Form 3": {
+     *       "tuitionFee": 550.00,
+     *       "examinationFee": 60.00,
+     *       "otherFees": 30.00
+     *     }
+     *   },
+     *   "defaultFeeStructure": {
+     *     "tuitionFee": 450.00,
+     *     "examinationFee": 40.00,
+     *     "otherFees": 20.00
+     *   }
+     * }
+     */
+    @PostMapping("/year-end-promotion")
+    @Operation(
+        summary = "Year-End Promotion (Atomic)",
+        description = "Promotes all grades/forms simultaneously to prevent double-promotion. " +
+                      "School-type-aware (Primary: Grades 1-7, Secondary: Forms 1-6). " +
+                      "Tracks completion statuses for students finishing education."
+    )
+    @ApiResponses(value = {
+        @ApiResponse(
+            responseCode = "200",
+            description = "Year-end promotion completed successfully",
+            content = @Content(schema = @Schema(implementation = com.bank.schoolmanagement.dto.YearEndPromotionSummary.class))
+        ),
+        @ApiResponse(
+            responseCode = "400",
+            description = "Invalid request (missing required fields, invalid academic year, etc.)"
+        ),
+        @ApiResponse(
+            responseCode = "500",
+            description = "Server error during promotion"
+        )
+    })
+    public ResponseEntity<?> performYearEndPromotion(
+            @Valid @RequestBody com.bank.schoolmanagement.dto.YearEndPromotionRequest request) {
+        
+        log.info("REST request for year-end promotion: academic year {}", request.getNewAcademicYear());
+        
+        try {
+            // Validate request
+            if (request.getNewAcademicYear() == null || request.getNewAcademicYear().isBlank()) {
+                return ResponseEntity.badRequest()
+                    .body("Academic year is required");
+            }
+            
+            // Perform atomic year-end promotion
+            com.bank.schoolmanagement.dto.YearEndPromotionSummary summary = 
+                studentService.performYearEndPromotion(request);
+            
+            log.info("Year-end promotion completed: {} promoted, {} completed, {} errors",
+                summary.getPromotedCount(), summary.getCompletedCount(), summary.getErrorCount());
+            
+            return ResponseEntity.ok(summary);
+            
+        } catch (IllegalStateException e) {
+            log.error("Invalid state for year-end promotion: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(e.getMessage());
+            
+        } catch (Exception e) {
+            log.error("Error in year-end promotion: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body("Error in year-end promotion: " + e.getMessage());
         }
     }
 }

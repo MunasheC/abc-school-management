@@ -6,6 +6,7 @@ import com.bank.schoolmanagement.entity.Guardian;
 import com.bank.schoolmanagement.entity.Payment;
 import com.bank.schoolmanagement.entity.School;
 import com.bank.schoolmanagement.entity.Student;
+import com.bank.schoolmanagement.entity.StudentFeeRecord;
 import com.bank.schoolmanagement.repository.StudentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -58,6 +59,9 @@ public class StudentService {
     private final StudentRepository studentRepository;
     private final GuardianService guardianService;
     private final PaymentService paymentService;
+    private final AuditTrailService auditTrailService;
+    private final AcademicProgressionService academicProgressionService;
+    private final StudentFeeRecordService studentFeeRecordService;
 
     /**
      * Create a new student
@@ -91,6 +95,17 @@ public class StudentService {
         // The @PrePersist method in Student entity will generate ID if needed
         Student savedStudent = studentRepository.save(student);
         log.info("Student created successfully with ID: {}", savedStudent.getId());
+        
+        // Audit trail
+        auditTrailService.logAction(
+            null,
+            "SYSTEM",
+            "CREATE_STUDENT",
+            "Student",
+            savedStudent.getId() != null ? savedStudent.getId().toString() : null,
+            String.format("Created student: %s %s (ID: %s)",
+                savedStudent.getFirstName(), savedStudent.getLastName(), savedStudent.getStudentId())
+        );
         
         return savedStudent;
     }
@@ -175,6 +190,12 @@ public class StudentService {
         
         return studentRepository.findById(id)
                 .map(existingStudent -> {
+                    // Capture before state
+                    String beforeValue = String.format("Name: %s %s, Grade: %s, Class: %s, Active: %s",
+                        existingStudent.getFirstName(), existingStudent.getLastName(),
+                        existingStudent.getGrade(), existingStudent.getClassName(),
+                        existingStudent.getIsActive());
+                    
                     // Update student fields (only non-null values)
                     if (updatedStudent.getFirstName() != null) {
                         existingStudent.setFirstName(updatedStudent.getFirstName());
@@ -217,6 +238,26 @@ public class StudentService {
                     
                     Student savedStudent = studentRepository.save(existingStudent);
                     log.info("Student updated successfully");
+                    
+                    // Capture after state
+                    String afterValue = String.format("Name: %s %s, Grade: %s, Class: %s, Active: %s",
+                        savedStudent.getFirstName(), savedStudent.getLastName(),
+                        savedStudent.getGrade(), savedStudent.getClassName(),
+                        savedStudent.getIsActive());
+                    
+                    // Audit trail
+                    auditTrailService.logAction(
+                        null,
+                        "SYSTEM",
+                        "UPDATE_STUDENT",
+                        "Student",
+                        savedStudent.getId().toString(),
+                        String.format("Updated student: %s %s (ID: %s)",
+                            savedStudent.getFirstName(), savedStudent.getLastName(), savedStudent.getStudentId()),
+                        beforeValue,
+                        afterValue
+                    );
+                    
                     return savedStudent;
                 })
                 .orElseThrow(() -> {
@@ -255,8 +296,23 @@ public class StudentService {
             throw new IllegalArgumentException("Student not found with ID: " + id);
         }
         
+        Student student = studentRepository.findById(id).orElse(null);
+        
         studentRepository.deleteById(id);
         log.info("Student deleted successfully");
+        
+        // Audit trail
+        if (student != null) {
+            auditTrailService.logAction(
+                null,
+                "SYSTEM",
+                "DELETE_STUDENT",
+                "Student",
+                id.toString(),
+                String.format("Deleted student: %s %s (ID: %s)",
+                    student.getFirstName(), student.getLastName(), student.getStudentId())
+            );
+        }
     }
 
     /**
@@ -272,6 +328,18 @@ public class StudentService {
                     student.setIsActive(false);
                     Student savedStudent = studentRepository.save(student);
                     log.info("Student deactivated successfully");
+                    
+                    // Audit trail
+                    auditTrailService.logAction(
+                        null,
+                        "SYSTEM",
+                        "DEACTIVATE_STUDENT",
+                        "Student",
+                        savedStudent.getId().toString(),
+                        String.format("Deactivated student: %s %s (ID: %s)",
+                            savedStudent.getFirstName(), savedStudent.getLastName(), savedStudent.getStudentId())
+                    );
+                    
                     return savedStudent;
                 })
                 .orElseThrow(() -> {
@@ -292,6 +360,18 @@ public class StudentService {
                     student.setIsActive(true);
                     Student savedStudent = studentRepository.save(student);
                     log.info("Student reactivated successfully");
+                    
+                    // Audit trail
+                    auditTrailService.logAction(
+                        null,
+                        "SYSTEM",
+                        "REACTIVATE_STUDENT",
+                        "Student",
+                        savedStudent.getId().toString(),
+                        String.format("Reactivated student: %s %s (ID: %s)",
+                            savedStudent.getFirstName(), savedStudent.getLastName(), savedStudent.getStudentId())
+                    );
+                    
                     return savedStudent;
                 })
                 .orElseThrow(() -> {
@@ -689,6 +769,567 @@ public class StudentService {
         }, () -> {
             throw new IllegalArgumentException("Student not found with ID: " + id);
         });
+    }
+
+    /**
+     * Promote student to next grade/form
+     * 
+     * PURPOSE: Handle grade progression at year-end or mid-year
+     * 
+     * LEARNING: Student promotion workflow
+     * 1. Update student's grade and className
+     * 2. Previous fee records remain unchanged (historical data)
+     * 3. Controller/service creates new fee record for new academic year
+     * 4. Can optionally carry forward outstanding balance
+     * 
+     * USAGE EXAMPLES:
+     * - Year-end: Form 1 → Form 2
+     * - Mid-year transfer: Grade 5A → Grade 5B
+     * - Repeating: Form 3 → Form 3 (new academic year)
+     * 
+     * @param studentId Student to promote
+     * @param newGrade New grade/form level
+     * @param newClassName New class within grade
+     * @param promotionNotes Optional notes about promotion
+     * @return Updated student
+     */
+    @Transactional
+    public Student promoteStudent(Long studentId, String newGrade, String newClassName, String promotionNotes) {
+        log.info("Promoting student ID {} to grade: {}, class: {}", studentId, newGrade, newClassName);
+        
+        return studentRepository.findById(studentId)
+                .map(student -> {
+                    String oldGrade = student.getGrade();
+                    String oldClassName = student.getClassName();
+                    
+                    // Capture before state
+                    String beforeValue = String.format("Grade: %s, Class: %s", oldGrade, oldClassName);
+                    
+                    // Update student grade information
+                    student.setGrade(newGrade);
+                    student.setClassName(newClassName);
+                    
+                    // Add promotion notes if provided
+                    if (promotionNotes != null && !promotionNotes.isBlank()) {
+                        String currentNotes = student.getNotes() != null ? student.getNotes() : "";
+                        String updatedNotes = currentNotes.isBlank() 
+                            ? promotionNotes 
+                            : currentNotes + "\n[" + LocalDate.now() + "] " + promotionNotes;
+                        student.setNotes(updatedNotes);
+                    }
+                    
+                    Student promoted = studentRepository.save(student);
+                    
+                    // Capture after state
+                    String afterValue = String.format("Grade: %s, Class: %s", newGrade, newClassName);
+                    
+                    // Audit trail
+                    auditTrailService.logAction(
+                        null,
+                        "SYSTEM",
+                        "PROMOTE_STUDENT",
+                        "Student",
+                        promoted.getId().toString(),
+                        String.format("Promoted student: %s %s from %s to %s",
+                            promoted.getFirstName(), promoted.getLastName(), oldGrade, newGrade),
+                        beforeValue,
+                        afterValue
+                    );
+                    
+                    log.info("Student promoted successfully: {} {} ({} → {})", 
+                        promoted.getFirstName(), promoted.getLastName(), oldGrade, newGrade);
+                    
+                    return promoted;
+                })
+                .orElseThrow(() -> {
+                    log.error("Student not found with ID: {}", studentId);
+                    return new IllegalArgumentException("Student not found with ID: " + studentId);
+                });
+    }
+    
+    /**
+     * Demote student back to previous grade (for repeating students)
+     * 
+     * PURPOSE: Revert incorrectly promoted student or mark as repeating
+     * 
+     * USE CASE: After automatic year-end promotion, admin realizes student
+     * should be repeating the grade
+     * 
+     * WORKFLOW:
+     * 1. Update student grade back to previous level
+     * 2. Clear completion status if student was marked as completed
+     * 3. Reactivate student if they were deactivated
+     * 4. Add audit trail entry
+     * 
+     * @param studentId Student to demote
+     * @param demotedGrade Grade to demote back to
+     * @param demotedClassName Class within the demoted grade
+     * @param reason Reason for demotion
+     * @return Updated student
+     */
+    @Transactional
+    public Student demoteStudent(Long studentId, String demotedGrade, String demotedClassName, String reason) {
+        log.info("Demoting student ID {} back to grade: {}, class: {}", studentId, demotedGrade, demotedClassName);
+        
+        return studentRepository.findById(studentId)
+                .map(student -> {
+                    String oldGrade = student.getGrade();
+                    String oldClassName = student.getClassName();
+                    String oldCompletionStatus = student.getCompletionStatus();
+                    boolean wasInactive = !student.getIsActive();
+                    
+                    // Capture before state
+                    String beforeValue = String.format("Grade: %s, Class: %s, Status: %s, Active: %s", 
+                        oldGrade, oldClassName, 
+                        oldCompletionStatus != null ? oldCompletionStatus : "ACTIVE",
+                        student.getIsActive());
+                    
+                    // Update student to demoted grade
+                    student.setGrade(demotedGrade);
+                    student.setClassName(demotedClassName);
+                    
+                    // Clear completion status (student is no longer completed)
+                    if (oldCompletionStatus != null && !oldCompletionStatus.isBlank()) {
+                        student.setCompletionStatus(null);
+                        log.info("Cleared completion status: {}", oldCompletionStatus);
+                    }
+                    
+                    // Reactivate student if they were deactivated due to completion
+                    if (wasInactive) {
+                        student.setIsActive(true);
+                        log.info("Reactivated student (was inactive)");
+                    }
+                    
+                    // Add demotion notes
+                    String demotionNote = String.format("[%s] DEMOTION: %s → %s. Reason: %s", 
+                        LocalDate.now(), oldGrade, demotedGrade, reason);
+                    String currentNotes = student.getNotes() != null ? student.getNotes() : "";
+                    String updatedNotes = currentNotes.isBlank() 
+                        ? demotionNote 
+                        : currentNotes + "\n" + demotionNote;
+                    student.setNotes(updatedNotes);
+                    
+                    Student demoted = studentRepository.save(student);
+                    
+                    // Capture after state
+                    String afterValue = String.format("Grade: %s, Class: %s, Status: ACTIVE, Active: true", 
+                        demotedGrade, demotedClassName);
+                    
+                    // Audit trail
+                    auditTrailService.logAction(
+                        null,
+                        "SYSTEM",
+                        "DEMOTE_STUDENT",
+                        "Student",
+                        demoted.getId().toString(),
+                        String.format("Demoted student: %s %s from %s to %s. Reason: %s",
+                            demoted.getFirstName(), demoted.getLastName(), oldGrade, demotedGrade, reason),
+                        beforeValue,
+                        afterValue
+                    );
+                    
+                    log.info("Student demoted successfully: {} {} ({} → {})", 
+                        demoted.getFirstName(), demoted.getLastName(), oldGrade, demotedGrade);
+                    
+                    return demoted;
+                })
+                .orElseThrow(() -> {
+                    log.error("Student not found with ID: {}", studentId);
+                    return new IllegalArgumentException("Student not found with ID: " + studentId);
+                });
+    }
+    
+    /**
+     * Get students by current grade (for bulk operations)
+     * 
+     * USAGE: Retrieve all students in a specific grade for bulk promotion
+     * Example: Get all Form 1 students to promote to Form 2 at year-end
+     * 
+     * @param grade Grade to filter by
+     * @return List of students in that grade
+     */
+    public List<Student> getStudentsByGradeForPromotion(String grade) {
+        log.debug("Fetching active students in grade: {} for promotion", grade);
+        School currentSchool = SchoolContext.getCurrentSchool();
+        
+        if (currentSchool == null) {
+            log.error("No school context available for promotion query");
+            throw new IllegalStateException("School context is required");
+        }
+        
+        // Get only active students in the specified grade
+        return studentRepository.findBySchoolAndGradeAndIsActiveTrue(currentSchool, grade);
+    }
+    
+    /**
+     * Year-end promotion for ALL grades/forms 
+     * 
+     * PURPOSE: Prevent double-promotion bug by processing all grades simultaneously
+     * 
+     * CRITICAL LOGIC:
+     * 1. Take SNAPSHOT of all students with their current grades (before any changes)
+     * 2. Calculate next level for each student based on snapshot
+     * 3. Apply all promotions/completions together
+     * 
+     * This prevents:
+     * - Promoting Form 1 → Form 2
+     * - Then promoting Form 2 → Form 3 (which would include newly promoted Form 2s!)
+     * 
+     * PROGRESSION RULES:
+     * - Primary: Grade 1→2, 2→3, ..., 6→7, 7→Completed Primary
+     * - Secondary: Form 1→2, 2→3, 3→4→Completed O Level
+     * - A Level: Form 4→5, 5→6, 6→Completed A Level
+     * 
+     * @param excludedStudentIds Students to skip (repeating grade, transferred, etc.)
+     * @return Map of students grouped by their current grade for processing
+     */
+    @Transactional
+    public java.util.Map<String, java.util.List<Student>> prepareYearEndPromotion(List<Long> excludedStudentIds) {
+        log.info("Preparing year-end promotion snapshot");
+        School currentSchool = SchoolContext.getCurrentSchool();
+        
+        if (currentSchool == null) {
+            log.error("No school context available for year-end promotion");
+            throw new IllegalStateException("School context is required");
+        }
+        
+        // Get ALL active students
+        java.util.List<Student> allStudents = studentRepository.findBySchoolAndIsActive(currentSchool, true);
+        
+        // Group by current grade (snapshot before promotion)
+        java.util.Map<String, java.util.List<Student>> studentsByGrade = new java.util.HashMap<>();
+        
+        for (Student student : allStudents) {
+            // Skip excluded students
+            if (excludedStudentIds != null && excludedStudentIds.contains(student.getId())) {
+                log.debug("Skipping excluded student: {} {}", student.getFirstName(), student.getLastName());
+                continue;
+            }
+            
+            // Skip already completed students
+            if (student.getCompletionStatus() != null && !student.getCompletionStatus().isBlank()) {
+                log.debug("Skipping completed student: {} {} ({})", 
+                    student.getFirstName(), student.getLastName(), student.getCompletionStatus());
+                continue;
+            }
+            
+            String currentGrade = student.getGrade();
+            if (currentGrade == null || currentGrade.isBlank()) {
+                log.warn("Student {} {} has no grade assigned", student.getFirstName(), student.getLastName());
+                continue;
+            }
+            
+            studentsByGrade.computeIfAbsent(currentGrade, k -> new java.util.ArrayList<>()).add(student);
+        }
+        
+        log.info("Promotion snapshot ready: {} grades with total {} students", 
+            studentsByGrade.size(), studentsByGrade.values().stream().mapToInt(List::size).sum());
+        
+        return studentsByGrade;
+    }
+    
+    /**
+     * Apply promotion to a single student based on school type
+     * 
+     * @param student Student to promote
+     * @param schoolType School type (PRIMARY, SECONDARY, COMBINED)
+     * @param promotionNotes Notes about promotion
+     * @return Updated student
+     */
+    @Transactional
+    public Student applyYearEndPromotion(Student student, String schoolType, String promotionNotes) {
+        log.debug("Applying year-end promotion for student: {} {} ({})", 
+            student.getFirstName(), student.getLastName(), student.getGrade());
+        
+        String currentGrade = student.getGrade();
+        String beforeValue = String.format("Grade: %s, Status: %s", 
+            currentGrade, student.getCompletionStatus() != null ? student.getCompletionStatus() : "ACTIVE");
+        
+        // Calculate next level
+        AcademicProgressionService.ProgressionResult progression = 
+            academicProgressionService.getNextLevel(currentGrade, schoolType);
+        
+        if (progression.isCompleted()) {
+            // Student completes their education
+            student.setCompletionStatus(progression.getCompletionStatus());
+            student.setIsActive(false); // Mark as inactive (completed)
+            
+            String afterValue = String.format("Grade: %s, Status: %s", 
+                currentGrade, progression.getCompletionStatus());
+            
+            Student completed = studentRepository.save(student);
+            
+            // Audit trail
+            auditTrailService.logAction(
+                null,
+                "SYSTEM",
+                "COMPLETE_EDUCATION",
+                "Student",
+                completed.getId().toString(),
+                String.format("Student %s %s completed: %s",
+                    completed.getFirstName(), completed.getLastName(), progression.getCompletionStatus()),
+                beforeValue,
+                afterValue
+            );
+            
+            log.info("Student {} {} completed: {}", 
+                completed.getFirstName(), completed.getLastName(), progression.getCompletionStatus());
+            
+            return completed;
+            
+        } else {
+            // Promote to next grade/form
+            student.setGrade(progression.getNextGrade());
+            
+            // Add promotion notes
+            if (promotionNotes != null && !promotionNotes.isBlank()) {
+                String currentNotes = student.getNotes() != null ? student.getNotes() : "";
+                String updatedNotes = currentNotes.isBlank() 
+                    ? promotionNotes 
+                    : currentNotes + "\n[" + LocalDate.now() + "] " + promotionNotes;
+                student.setNotes(updatedNotes);
+            }
+            
+            String afterValue = String.format("Grade: %s, Status: ACTIVE", progression.getNextGrade());
+            
+            Student promoted = studentRepository.save(student);
+            
+            // Audit trail
+            auditTrailService.logAction(
+                null,
+                "SYSTEM",
+                "YEAR_END_PROMOTION",
+                "Student",
+                promoted.getId().toString(),
+                String.format("Year-end promotion: %s %s (%s → %s)",
+                    promoted.getFirstName(), promoted.getLastName(), currentGrade, progression.getNextGrade()),
+                beforeValue,
+                afterValue
+            );
+            
+            log.info("Student {} {} promoted: {} → {}", 
+                promoted.getFirstName(), promoted.getLastName(), currentGrade, progression.getNextGrade());
+            
+            return promoted;
+        }
+    }
+    
+    /**
+     * Complete year-end promotion orchestration
+     * 
+     * ATOMIC OPERATION: All grades promote simultaneously to prevent double-promotion
+     * 
+     * WORKFLOW:
+     * 1. Take snapshot of ALL active students grouped by current grade
+     * 2. Calculate next level for each grade based on school type
+     * 3. Apply all promotions/completions together
+     * 4. Create fee records for promoted students
+     * 5. Generate detailed summary
+     * 
+     * @param request Year-end promotion configuration
+     * @return Detailed summary with statistics and errors
+     */
+    @Transactional
+    public com.bank.schoolmanagement.dto.YearEndPromotionSummary performYearEndPromotion(
+            com.bank.schoolmanagement.dto.YearEndPromotionRequest request) {
+        
+        log.info("Starting year-end promotion for academic year: {}", request.getNewAcademicYear());
+        
+        School currentSchool = SchoolContext.getCurrentSchool();
+        if (currentSchool == null) {
+            throw new IllegalStateException("School context is required for year-end promotion");
+        }
+        
+        // Initialize summary
+        com.bank.schoolmanagement.dto.YearEndPromotionSummary summary = new com.bank.schoolmanagement.dto.YearEndPromotionSummary();
+        summary.setGradeBreakdown(new java.util.HashMap<>());
+        summary.setPromotedStudentIds(new java.util.ArrayList<>());
+        summary.setCompletedStudents(new java.util.ArrayList<>());
+        summary.setErrors(new java.util.ArrayList<>());
+        
+        // Initialize counters to 0
+        summary.setPromotedCount(0);
+        summary.setCompletedCount(0);
+        summary.setErrorCount(0);
+        
+        try {
+            // STEP 1: Take snapshot of all students by grade (BEFORE any changes)
+            java.util.Map<String, java.util.List<Student>> studentsByGrade = 
+                prepareYearEndPromotion(request.getExcludedStudentIds());
+            
+            int totalStudents = studentsByGrade.values().stream()
+                .mapToInt(java.util.List::size).sum();
+            summary.setTotalStudentsProcessed(totalStudents);
+            summary.setExcludedCount(request.getExcludedStudentIds() != null 
+                ? request.getExcludedStudentIds().size() : 0);
+            
+            log.info("Snapshot captured: {} grades with {} total students", 
+                studentsByGrade.size(), totalStudents);
+            
+            // STEP 2: Process each grade group atomically
+            for (java.util.Map.Entry<String, java.util.List<Student>> entry : studentsByGrade.entrySet()) {
+                String currentGrade = entry.getKey();
+                java.util.List<Student> students = entry.getValue();
+                
+                log.info("Processing grade: {} ({} students)", currentGrade, students.size());
+                
+                // Initialize grade stats
+                com.bank.schoolmanagement.dto.YearEndPromotionSummary.GradePromotionStats gradeStats = 
+                    new com.bank.schoolmanagement.dto.YearEndPromotionSummary.GradePromotionStats();
+                gradeStats.setFromGrade(currentGrade);
+                gradeStats.setStudentCount(students.size());
+                gradeStats.setSuccessCount(0);
+                gradeStats.setErrorCount(0);
+                
+                // Process each student in this grade
+                for (Student student : students) {
+                    try {
+                        // Apply promotion based on school type
+                        Student updated = applyYearEndPromotion(
+                            student, 
+                            currentSchool.getSchoolType(), 
+                            request.getPromotionNotes()
+                        );
+                        
+                        // Check if student completed or promoted
+                        if (updated.getCompletionStatus() != null && !updated.getCompletionStatus().isBlank()) {
+                            // Student completed their education
+                            gradeStats.setSuccessCount(gradeStats.getSuccessCount() + 1);
+                            gradeStats.setToGrade("COMPLETED");
+                            summary.setCompletedCount(summary.getCompletedCount() + 1);
+                            
+                            summary.getCompletedStudents().add(
+                                new com.bank.schoolmanagement.dto.YearEndPromotionSummary.CompletedStudent(
+                                    updated.getId(),
+                                    updated.getStudentId(),
+                                    updated.getFirstName() + " " + updated.getLastName(),
+                                    updated.getCompletionStatus()
+                                )
+                            );
+                            
+                        } else {
+                            // Student was promoted to next grade
+                            gradeStats.setSuccessCount(gradeStats.getSuccessCount() + 1);
+                            gradeStats.setToGrade(updated.getGrade());
+                            summary.setPromotedCount(summary.getPromotedCount() + 1);
+                            summary.getPromotedStudentIds().add(updated.getStudentId());
+                            
+                            // Create fee record for promoted student
+                            try {
+                                createFeeRecordForPromotedStudent(
+                                    updated, 
+                                    request.getNewAcademicYear(),
+                                    request.getFeeStructures(),
+                                    request.getDefaultFeeStructure(),
+                                    request.getCarryForwardBalances()
+                                );
+                            } catch (Exception feeError) {
+                                log.error("Failed to create fee record for {}: {}", 
+                                    updated.getStudentId(), feeError.getMessage());
+                                // Don't fail promotion, just log error
+                            }
+                        }
+                        
+                    } catch (Exception e) {
+                        gradeStats.setErrorCount(gradeStats.getErrorCount() + 1);
+                        summary.setErrorCount(summary.getErrorCount() + 1);
+                        
+                        summary.getErrors().add(
+                            new com.bank.schoolmanagement.dto.YearEndPromotionSummary.PromotionError(
+                                student.getId(),
+                                student.getFirstName() + " " + student.getLastName(),
+                                currentGrade,
+                                e.getMessage()
+                            )
+                        );
+                        
+                        log.error("Error promoting student {} {}: {}", 
+                            student.getFirstName(), student.getLastName(), e.getMessage());
+                    }
+                }
+                
+                // Save grade breakdown
+                summary.getGradeBreakdown().put(currentGrade, gradeStats);
+                
+                log.info("Grade {} complete: {} successful ({} promoted + completed), {} errors",
+                    currentGrade, gradeStats.getSuccessCount(), 
+                    gradeStats.getToGrade(), gradeStats.getErrorCount());
+            }
+            
+            // Set final summary message
+            summary.setMessage(String.format(
+                "Year-end promotion complete for %s: %d students promoted, %d completed, %d errors",
+                request.getNewAcademicYear(),
+                summary.getPromotedCount(),
+                summary.getCompletedCount(),
+                summary.getErrorCount()
+            ));
+            
+            log.info("Year-end promotion complete: {} promoted, {} completed, {} errors",
+                summary.getPromotedCount(), summary.getCompletedCount(), summary.getErrorCount());
+            
+            return summary;
+            
+        } catch (Exception e) {
+            log.error("Critical error in year-end promotion: {}", e.getMessage(), e);
+            summary.setMessage("Year-end promotion failed: " + e.getMessage());
+            summary.setErrorCount(summary.getTotalStudentsProcessed());
+            throw new RuntimeException("Year-end promotion failed: " + e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * Create fee record for promoted student with grade-specific fee structure
+     */
+    private void createFeeRecordForPromotedStudent(
+            Student student,
+            String academicYear,
+            java.util.Map<String, com.bank.schoolmanagement.dto.YearEndPromotionRequest.FeeStructure> feeStructures,
+            com.bank.schoolmanagement.dto.YearEndPromotionRequest.FeeStructure defaultFeeStructure,
+            Boolean carryForwardBalances) {
+        
+        // Get fee structure for student's NEW grade
+        String newGrade = student.getGrade();
+        com.bank.schoolmanagement.dto.YearEndPromotionRequest.FeeStructure feeStructure = 
+            feeStructures != null ? feeStructures.get(newGrade) : null;
+        
+        if (feeStructure == null) {
+            feeStructure = defaultFeeStructure;
+        }
+        
+        if (feeStructure == null) {
+            log.warn("No fee structure defined for grade {}, skipping fee record creation", newGrade);
+            return;
+        }
+        
+        // Calculate previous balance if needed
+        java.math.BigDecimal previousBalance = java.math.BigDecimal.ZERO;
+        if (Boolean.TRUE.equals(carryForwardBalances)) {
+            java.util.Optional<StudentFeeRecord> latestRecordOpt = 
+                studentFeeRecordService.getLatestFeeRecordForStudent(student.getId());
+            if (latestRecordOpt.isPresent()) {
+                previousBalance = latestRecordOpt.get().getOutstandingBalance();
+            }
+        }
+        
+        // Create new fee record with all required parameters
+        studentFeeRecordService.createPromotionFeeRecord(
+            student,
+            academicYear,
+            previousBalance,
+            feeStructure.getTuitionFee(),
+            feeStructure.getBoardingFee(),
+            feeStructure.getDevelopmentLevy(),
+            feeStructure.getExamFee(),
+            feeStructure.getOtherFees(),
+            feeStructure.getDefaultScholarship(),
+            feeStructure.getDefaultSiblingDiscount(),
+            feeStructure.getFeeCategory()
+        );
+        
+        log.debug("Created fee record for {} {} in {}: tuition={}, boarding={}, exam={}",
+            student.getFirstName(), student.getLastName(), newGrade,
+            feeStructure.getTuitionFee(), feeStructure.getBoardingFee(), feeStructure.getExamFee());
     }
 
 }

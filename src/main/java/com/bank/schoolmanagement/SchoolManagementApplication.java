@@ -2,6 +2,7 @@ package com.bank.schoolmanagement;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * Main Application Class
@@ -10,8 +11,12 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * - @Configuration: Tags this class as a source of bean definitions
  * - @EnableAutoConfiguration: Tells Spring Boot to auto-configure based on dependencies
  * - @ComponentScan: Tells Spring to scan for components in this package and sub-packages
+ * 
+ * @EnableScheduling enables Spring's scheduled task execution capability
+ * Required for @Scheduled annotations to work (e.g., automatic year-end promotion)
  */
 @SpringBootApplication
+@EnableScheduling
 public class SchoolManagementApplication {
 
     /**

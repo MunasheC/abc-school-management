@@ -11,6 +11,7 @@ import com.bank.schoolmanagement.repository.PaymentRepository;
 import com.bank.schoolmanagement.repository.SchoolRepository;
 import com.bank.schoolmanagement.repository.StudentFeeRecordRepository;
 import com.bank.schoolmanagement.repository.StudentRepository;
+import com.bank.schoolmanagement.service.AuditTrailService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Pageable;
@@ -46,7 +47,9 @@ public class BankPaymentService {
     private final PaymentRepository paymentRepository;
     private final StudentRepository studentRepository;
     private final StudentFeeRecordRepository feeRecordRepository;
+    private final StudentFeeRecordService feeRecordService;
     private final SchoolRepository schoolRepository;
+    private final AuditTrailService auditTrailService;
 
     /**
      * Get all onboarded schools (for bank teller dropdown)
@@ -130,8 +133,8 @@ public class BankPaymentService {
             throw new IllegalArgumentException("Student does not belong to school " + schoolCode);
         }
         
-        // Get fee record (optional)
-        Optional<StudentFeeRecord> feeRecordOpt = feeRecordRepository.findByStudentId(student.getId());
+        // Get latest fee record (optional)
+        Optional<StudentFeeRecord> feeRecordOpt = feeRecordService.getLatestFeeRecordForStudent(student.getId());
         
         // Build DTO response (no circular references)
         StudentLookupResponse response = new StudentLookupResponse();
@@ -218,8 +221,8 @@ public class BankPaymentService {
             throw new IllegalArgumentException("Student does not belong to school " + schoolCode);
         }
         
-        // Get fee record (optional)
-        Optional<StudentFeeRecord> feeRecordOpt = feeRecordRepository.findByStudentId(student.getId());
+        // Get latest fee record (optional)
+        Optional<StudentFeeRecord> feeRecordOpt = feeRecordService.getLatestFeeRecordForStudent(student.getId());
         
         // Build entity result
         StudentLookupResult result = new StudentLookupResult();
@@ -316,8 +319,8 @@ public class BankPaymentService {
                 response.setSchoolCode(school.getSchoolCode());
                 response.setSchoolName(school.getSchoolName());
                 
-                // Get fee record (optional)
-                Optional<StudentFeeRecord> feeRecordOpt = feeRecordRepository.findByStudentId(student.getId());
+                // Get latest fee record (optional)
+                Optional<StudentFeeRecord> feeRecordOpt = feeRecordService.getLatestFeeRecordForStudent(student.getId());
                 
                 if (feeRecordOpt.isPresent()) {
                     StudentFeeRecord feeRecord = feeRecordOpt.get();
@@ -400,6 +403,17 @@ public class BankPaymentService {
         
         log.info("Bank counter payment recorded successfully: {}", savedPayment.getPaymentReference());
         
+        // Audit trail
+        auditTrailService.logAction(
+            null, // userId (set if available)
+            request.getTellerName(),
+            "BANK_PAYMENT",
+            "Payment",
+            savedPayment.getId() != null ? savedPayment.getId().toString() : null,
+            String.format("Bank payment of %s for student %s by teller %s (branch: %s, txn: %s)",
+                request.getAmount(), request.getStudentReference(), request.getTellerName(), request.getBankBranch(), request.getBankTransactionId())
+        );
+        
         // TODO: Send notification to school bursar (task 6)
         
         return savedPayment;
@@ -457,6 +471,17 @@ public class BankPaymentService {
         }
         
         log.info("Digital banking payment recorded successfully: {}", savedPayment.getPaymentReference());
+        
+        // Audit trail
+        auditTrailService.logAction(
+            null, // userId (set if available)
+            "DigitalBanking",
+            "DIGITAL_BANK_PAYMENT",
+            "Payment",
+            savedPayment.getId() != null ? savedPayment.getId().toString() : null,
+            String.format("Digital banking payment of %s for student %s (txn: %s)",
+                request.getAmount(), request.getStudentReference(), request.getBankTransactionId())
+        );
         
         // TODO: Send notification to parent and school (task 6)
         

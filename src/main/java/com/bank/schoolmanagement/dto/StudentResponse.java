@@ -18,6 +18,7 @@ public class StudentResponse {
     private String parentEmail;
     private String address;
     private Boolean active;
+    private String completionStatus;
 
     public static StudentResponse fromEntity(Student student) {
         StudentResponse dto = new StudentResponse();
@@ -36,6 +37,8 @@ public class StudentResponse {
             dto.setAddress(student.getGuardian().getAddress());
         }
         dto.setActive(student.getIsActive());
+        dto.setCompletionStatus(student.getCompletionStatus());
+
         return dto;
     }
 }

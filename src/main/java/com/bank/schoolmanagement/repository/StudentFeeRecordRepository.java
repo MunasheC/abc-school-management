@@ -8,7 +8,7 @@ import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
 import java.util.List;
-import java.util.Optional;
+
 
 /**
  * StudentFeeRecord Repository - Financial data access
@@ -22,16 +22,24 @@ import java.util.Optional;
 public interface StudentFeeRecordRepository extends JpaRepository<StudentFeeRecord, Long> {
 
     /**
-     * Find fee record by student database ID
+     * Find ALL fee records for a student by database ID (OneToMany relationship)
+     * Returns all historical fee records for the student
      */
-    Optional<StudentFeeRecord> findByStudentId(Long studentId);
+    List<StudentFeeRecord> findByStudentId(Long studentId);
 
     /**
-     * Find fee record by student's studentId field (e.g., STU1733838975353)
+     * Find ALL fee records by student's studentId field (e.g., STU1733838975353)
+     * Returns all historical fee records for the student
      * Spring generates: SELECT * FROM student_fee_records WHERE student_id IN 
      *                   (SELECT id FROM students WHERE student_id = ?)
      */
-    Optional<StudentFeeRecord> findByStudent_StudentId(String studentId);
+    List<StudentFeeRecord> findByStudent_StudentId(String studentId);
+    
+    /**
+     * Find fee records by student ID ordered by creation date (newest first)
+     * Useful for getting latest fee record
+     */
+    List<StudentFeeRecord> findByStudentIdOrderByCreatedAtDesc(Long studentId);
 
     /**
      * Find fee records by term/year
@@ -241,4 +249,13 @@ public interface StudentFeeRecordRepository extends JpaRepository<StudentFeeReco
      * Count total fee records for a school
      */
     long countBySchool(com.bank.schoolmanagement.entity.School school);
+    
+    /**
+     * Find fee records for a student ordered by ID descending (most recent first)
+     * 
+     * USAGE: Get latest fee record for promotion workflow
+     * - Most recent record is first in list
+     * - Helps identify current term before creating new promotion record
+     */
+    List<StudentFeeRecord> findByStudentIdOrderByIdDesc(Long studentId);
 }

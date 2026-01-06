@@ -22,7 +22,7 @@ import org.springframework.web.bind.annotation.*;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
+
 
 
 /**
@@ -92,38 +92,46 @@ public class StudentFeeRecordController {
     }
 
     /**
-     * READ - Get fee record for a student by database ID
+     * READ - Get latest fee record for a student by database ID
      * 
      * GET /api/fee-records/student/{studentId}
      * 
-     * Returns the current fee record for the student (by database ID)
+     * Returns the most recent fee record for the student (by database ID)
      */
     @GetMapping("/student/{studentId}")
     public ResponseEntity<StudentFeeRecordResponse> getFeeRecordByStudentId(@PathVariable Long studentId) {
-        log.info("REST request to get fee record for student database ID: {}", studentId);
-        return feeRecordService.getFeeRecordByStudentId(studentId)
+        log.info("REST request to get latest fee record for student database ID: {}", studentId);
+        return feeRecordService.getLatestFeeRecordForStudent(studentId)
                 .map(StudentFeeRecordResponse::fromEntity)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
 
     /**
-     * READ - Get fee record for a student by studentId (e.g., STU1733838975353)
+     * READ - Get ALL fee records for a student by studentId (complete history)
      * 
-     * GET /api/fee-records/student-ref/{studentId}
+     * GET /api/school/fee-records/student-ref/{studentId}
      * 
-     * Returns the current fee record for the student using their studentId field
-     * Example: GET /api/fee-records/student-ref/STU1733838975353
+     * Returns ALL fee records for the student (all terms/years)
+     * Example: GET /api/school/fee-records/student-ref/2025-5001
+     * 
+     * NOTE: Changed from single record to list (OneToMany relationship)
      */
     @GetMapping("/student-ref/{studentId}")
-    public ResponseEntity<StudentFeeRecordResponse> getFeeRecordByStudentReference(@PathVariable String studentId) {
-        log.info("REST request to get fee record for student reference: {}", studentId);
+    public ResponseEntity<List<StudentFeeRecordResponse>> getFeeRecordsByStudentReference(@PathVariable String studentId) {
+        log.info("REST request to get all fee records for student reference: {}", studentId);
         
-        return feeRecordService.getFeeRecordByStudentReference(studentId)
-                .map(StudentFeeRecordResponse::fromEntity)
-//                .map(StudentFeeRecordResponse::fromEntity)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+        List<StudentFeeRecord> records = feeRecordService.getFeeRecordsByStudentReference(studentId);
+        
+        if (records.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        
+        List<StudentFeeRecordResponse> response = records.stream()
+            .map(StudentFeeRecordResponse::fromEntity)
+            .toList();
+            
+        return ResponseEntity.ok(response);
     }
     
     /**

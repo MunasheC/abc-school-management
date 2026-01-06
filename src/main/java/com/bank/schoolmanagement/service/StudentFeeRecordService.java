@@ -35,6 +35,7 @@ public class StudentFeeRecordService {
 
     private final StudentFeeRecordRepository feeRecordRepository;
     private final StudentRepository studentRepository;
+    private final AuditTrailService auditTrailService;
 
     /**
      * Create fee record for student
@@ -52,6 +53,19 @@ public class StudentFeeRecordService {
         StudentFeeRecord saved = feeRecordRepository.save(feeRecord);
         log.info("Fee record created with ID: {}, Outstanding: {}", 
                  saved.getId(), saved.getOutstandingBalance());
+        
+        // Audit trail
+        auditTrailService.logAction(
+            null,
+            "SYSTEM",
+            "CREATE_FEE_RECORD",
+            "StudentFeeRecord",
+            saved.getId() != null ? saved.getId().toString() : null,
+            String.format("Created fee record for student ID %s, Term: %s, Total: %s",
+                saved.getStudent() != null ? saved.getStudent().getId() : "UNKNOWN",
+                saved.getTermYear(), saved.getNetAmount())
+        );
+        
         return saved;
     }
 
@@ -64,22 +78,35 @@ public class StudentFeeRecordService {
     }
 
     /**
-     * Get fee record for a student by database ID
+     * Get ALL fee records for a student by database ID
      * 
-     * LEARNING: One student has one current fee record
-     * This gets the active fee record for the student
+     * CHANGE: Returns List instead of Optional (OneToMany relationship)
+     * Returns complete financial history (all terms/years)
      */
-    public Optional<StudentFeeRecord> getFeeRecordByStudentId(Long studentId) {
-        log.debug("Fetching fee record for student database ID: {}", studentId);
+    public List<StudentFeeRecord> getFeeRecordsByStudentId(Long studentId) {
+        log.debug("Fetching all fee records for student database ID: {}", studentId);
         return feeRecordRepository.findByStudentId(studentId);
     }
 
     /**
-     * Get fee record for a student by their studentId field (e.g., STU1733838975353)
+     * Get ALL fee records for a student by their studentId field (e.g., STU1733838975353)
+     * 
+     * CHANGE: Returns List instead of Optional (OneToMany relationship)
+     * Returns complete financial history (all terms/years)
      */
-    public Optional<StudentFeeRecord> getFeeRecordByStudentReference(String studentId) {
-        log.debug("Fetching fee record for student reference: {}", studentId);
+    public List<StudentFeeRecord> getFeeRecordsByStudentReference(String studentId) {
+        log.debug("Fetching all fee records for student reference: {}", studentId);
         return feeRecordRepository.findByStudent_StudentId(studentId);
+    }
+    
+    /**
+     * Get the LATEST fee record for a student (most recent term)
+     * Useful for current term balance checks and promotions
+     */
+    public Optional<StudentFeeRecord> getLatestFeeRecordForStudent(Long studentId) {
+        log.debug("Fetching latest fee record for student ID: {}", studentId);
+        List<StudentFeeRecord> records = feeRecordRepository.findByStudentIdOrderByCreatedAtDesc(studentId);
+        return records.isEmpty() ? Optional.empty() : Optional.of(records.get(0));
     }
 
     /**
@@ -143,6 +170,11 @@ public class StudentFeeRecordService {
         
         return feeRecordRepository.findById(id)
                 .map(existing -> {
+                    // Capture before state
+                    String beforeValue = String.format("Net Amount: %s, Paid: %s, Outstanding: %s, Category: %s, Term: %s",
+                        existing.getNetAmount(), existing.getAmountPaid(), 
+                        existing.getOutstandingBalance(), existing.getFeeCategory(), existing.getTermYear());
+                    
                     // Update fee components
                     if (updatedRecord.getTuitionFee() != null) {
                         existing.setTuitionFee(updatedRecord.getTuitionFee());
@@ -186,6 +218,26 @@ public class StudentFeeRecordService {
                     // calculateTotals() will run automatically due to @PreUpdate
                     StudentFeeRecord saved = feeRecordRepository.save(existing);
                     log.info("Fee record updated, new outstanding: {}", saved.getOutstandingBalance());
+                    
+                    // Capture after state
+                    String afterValue = String.format("Net Amount: %s, Paid: %s, Outstanding: %s, Category: %s, Term: %s",
+                        saved.getNetAmount(), saved.getAmountPaid(), 
+                        saved.getOutstandingBalance(), saved.getFeeCategory(), saved.getTermYear());
+                    
+                    // Audit trail
+                    auditTrailService.logAction(
+                        null,
+                        "SYSTEM",
+                        "UPDATE_FEE_RECORD",
+                        "StudentFeeRecord",
+                        saved.getId().toString(),
+                        String.format("Updated fee record for student ID %s, Term: %s, New Total: %s",
+                            saved.getStudent() != null ? saved.getStudent().getId() : "UNKNOWN",
+                            saved.getTermYear(), saved.getNetAmount()),
+                        beforeValue,
+                        afterValue
+                    );
+                    
                     return saved;
                 })
                 .orElseThrow(() -> {
@@ -448,7 +500,7 @@ public class StudentFeeRecordService {
             }
             
             // Check if student already has fee record for this term
-            Optional<StudentFeeRecord> existingRecord = feeRecordRepository.findByStudentId(student.getId());
+            Optional<StudentFeeRecord> existingRecord = getLatestFeeRecordForStudent(student.getId());
             
             StudentFeeRecord feeRecord;
             if (existingRecord.isPresent() && existingRecord.get().getTermYear().equals(termYear)) {
@@ -559,7 +611,7 @@ public class StudentFeeRecordService {
         List<StudentFeeRecord> createdRecords = new ArrayList<>();
         
         for (Student student : allStudents) {
-            Optional<StudentFeeRecord> existingRecord = feeRecordRepository.findByStudentId(student.getId());
+            Optional<StudentFeeRecord> existingRecord = getLatestFeeRecordForStudent(student.getId());
             
             StudentFeeRecord feeRecord;
             if (existingRecord.isPresent() && existingRecord.get().getTermYear().equals(termYear)) {
@@ -631,7 +683,7 @@ public class StudentFeeRecordService {
                 continue;
             }
             
-            Optional<StudentFeeRecord> existingRecord = feeRecordRepository.findByStudentId(student.getId());
+            Optional<StudentFeeRecord> existingRecord = getLatestFeeRecordForStudent(student.getId());
             
             StudentFeeRecord feeRecord;
             if (existingRecord.isPresent() && existingRecord.get().getTermYear().equals(termYear)) {
@@ -698,7 +750,7 @@ public class StudentFeeRecordService {
                 continue;
             }
             
-            Optional<StudentFeeRecord> existingRecord = feeRecordRepository.findByStudentId(student.getId());
+            Optional<StudentFeeRecord> existingRecord = getLatestFeeRecordForStudent(student.getId());
             
             StudentFeeRecord feeRecord;
             if (existingRecord.isPresent() && existingRecord.get().getTermYear().equals(termYear)) {
@@ -1131,10 +1183,11 @@ public class StudentFeeRecordService {
             }
             
             // Check if student already has fee record for this term and school
-            // Note: findByStudentId returns single record, we filter by term in code
             Optional<StudentFeeRecord> existingRecord = feeRecordRepository
                     .findByStudentId(student.getId())
-                    .filter(r -> r.getTermYear().equals(termYear) && r.getSchool().equals(school));
+                    .stream()
+                    .filter(r -> r.getTermYear().equals(termYear) && r.getSchool().equals(school))
+                    .findFirst();
             
             StudentFeeRecord feeRecord;
             if (existingRecord.isPresent()) {
@@ -1167,5 +1220,100 @@ public class StudentFeeRecordService {
         
         log.info("Successfully assigned fees to {} students", createdRecords.size());
         return createdRecords;
+    }
+    
+    /**
+     * Create fee record for promoted student
+     * 
+     * PURPOSE: Generate new fee record when student is promoted to next grade
+     * 
+     * LEARNING: Promotion fee record workflow
+     * 1. Previous term's fee record remains unchanged (historical data)
+     * 2. Create new fee record for new academic year/term
+     * 3. Optionally carry forward outstanding balance from previous term
+     * 4. Apply new fee structure for the promoted grade
+     * 
+     * @param student Student being promoted
+     * @param termYear New academic term/year (e.g., "Term 1 2026")
+     * @param previousBalance Outstanding balance from previous term (can be null/zero)
+     * @param tuitionFee New tuition fee amount
+     * @param boardingFee New boarding fee amount
+     * @param developmentLevy New development levy
+     * @param examFee New exam fee
+     * @param otherFees Other fees
+     * @param scholarshipAmount Scholarship to apply
+     * @param siblingDiscount Sibling discount to apply
+     * @param feeCategory Fee category (BOARDING, DAY_SCHOLAR, etc.)
+     * @return Created fee record
+     */
+    @Transactional
+    public StudentFeeRecord createPromotionFeeRecord(
+            Student student,
+            String termYear,
+            BigDecimal previousBalance,
+            BigDecimal tuitionFee,
+            BigDecimal boardingFee,
+            BigDecimal developmentLevy,
+            BigDecimal examFee,
+            BigDecimal otherFees,
+            BigDecimal scholarshipAmount,
+            BigDecimal siblingDiscount,
+            String feeCategory) {
+        
+        log.info("Creating promotion fee record for student: {}, Term: {}, Previous balance: {}", 
+            student.getStudentId(), termYear, previousBalance);
+        
+        // Create new fee record (OneToMany relationship allows multiple records per student)
+        StudentFeeRecord feeRecord = new StudentFeeRecord();
+        feeRecord.setStudent(student);
+        feeRecord.setSchool(student.getSchool());
+        feeRecord.setTermYear(termYear);
+        feeRecord.setFeeCategory(feeCategory != null ? feeCategory : "STANDARD");
+        
+        // Set fee components
+        feeRecord.setTuitionFee(tuitionFee != null ? tuitionFee : BigDecimal.ZERO);
+        feeRecord.setBoardingFee(boardingFee != null ? boardingFee : BigDecimal.ZERO);
+        feeRecord.setDevelopmentLevy(developmentLevy != null ? developmentLevy : BigDecimal.ZERO);
+        feeRecord.setExamFee(examFee != null ? examFee : BigDecimal.ZERO);
+        feeRecord.setOtherFees(otherFees != null ? otherFees : BigDecimal.ZERO);
+        
+        // Set discounts
+        feeRecord.setScholarshipAmount(scholarshipAmount != null ? scholarshipAmount : BigDecimal.ZERO);
+        feeRecord.setSiblingDiscount(siblingDiscount != null ? siblingDiscount : BigDecimal.ZERO);
+        feeRecord.setHasScholarship(scholarshipAmount != null && scholarshipAmount.compareTo(BigDecimal.ZERO) > 0);
+        
+        // Carry forward previous balance if provided
+        if (previousBalance != null && previousBalance.compareTo(BigDecimal.ZERO) > 0) {
+            feeRecord.setPreviousBalance(previousBalance);
+            log.info("Carrying forward previous balance: {} for student: {}", previousBalance, student.getStudentId());
+        } else {
+            feeRecord.setPreviousBalance(BigDecimal.ZERO);
+        }
+        
+        // Initialize payment fields for new term
+        feeRecord.setAmountPaid(BigDecimal.ZERO);
+        
+        // Save (calculateTotals runs automatically via @PrePersist)
+        StudentFeeRecord saved = feeRecordRepository.save(feeRecord);
+        
+        log.info("Created promotion fee record - Student: {}, Term: {}, Net Amount: {}, Outstanding: {}", 
+            student.getStudentId(), termYear, saved.getNetAmount(), saved.getOutstandingBalance());
+        
+        // Audit trail
+        auditTrailService.logAction(
+            null,
+            "SYSTEM",
+            "CREATE_PROMOTION_FEE_RECORD",
+            "StudentFeeRecord",
+            saved.getId().toString(),
+            String.format("Created promotion fee record for student %s (ID: %s), Term: %s, Amount: %s, Previous Balance: %s",
+                student.getFirstName() + " " + student.getLastName(),
+                student.getStudentId(),
+                termYear,
+                saved.getNetAmount(),
+                previousBalance != null ? previousBalance : BigDecimal.ZERO)
+        );
+        
+        return saved;
     }
 }
