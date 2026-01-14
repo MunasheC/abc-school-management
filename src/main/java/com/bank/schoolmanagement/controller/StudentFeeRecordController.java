@@ -449,6 +449,57 @@ public class StudentFeeRecordController {
         }
     }
 
+    /**
+     * UPDATE - Update a student's fee record by studentId, year, term, and currency
+     * 
+     * PUT /api/fee-records/student/{studentId}/year/{year}/term/{term}/currency/{currency}
+     * 
+     * Body example:
+     * {
+     *   "feeCategory": "Boarder",
+     *   "tuitionFee": 550.00,
+     *   "boardingFee": 320.00,
+     *   "developmentLevy": 55.00,
+     *   "examFee": 30.00,
+     *   "otherFees": 25.00
+     * }
+     * 
+     * LEARNING: Multi-currency support
+     * - Students can have multiple fee records for same term with different currencies
+     * - Currency is part of the identifier (studentId + year + term + currency)
+     * - Use this endpoint to adjust fees after initial assignment
+     * 
+     * Example: Update ZWG fees for student S001 in 2025 Term 1
+     * PUT /api/fee-records/student/S001/year/2025/term/1/currency/ZWG
+     */
+    @PutMapping("/student/{studentId}/year/{year}/term/{term}/currency/{currency}")
+    public ResponseEntity<StudentFeeRecordResponse> updateFeeRecordByStudent(
+            @PathVariable String studentId,
+            @PathVariable Integer year,
+            @PathVariable Integer term,
+            @PathVariable String currency,
+            @RequestBody FeeRecordUpdateRequest request) {
+        
+        log.info("REST request to update fee record for student {} (year={}, term={}, currency={})", 
+                 studentId, year, term, currency);
+        
+        StudentFeeRecord updated = feeRecordService.updateFeeRecordForStudent(
+            studentId,
+            year,
+            term,
+            currency,
+            request.feeCategory,
+            request.tuitionFee,
+            request.boardingFee,
+            request.developmentLevy,
+            request.examFee,
+            request.otherFees
+        );
+        
+        StudentFeeRecordResponse response = StudentFeeRecordResponse.fromEntity(updated);
+        return ResponseEntity.ok(response);
+    }
+
     /* ----------------------  BULK FEE ASSIGNMENT  ------------------------- */
 
     /**
@@ -484,8 +535,10 @@ public class StudentFeeRecordController {
         log.info("REST request to assign fees to grade: {}", grade);
         
         // Use school-aware service method so school is assigned from context
+        // Check for existing records with same currency (allows multiple currencies per term)
         List<StudentFeeRecord> existing = feeRecordService.getFeeRecordsByYearAndTermForCurrentSchool(request.year, request.term)
-            .stream().filter(r -> grade.equals(r.getStudent().getGrade())).toList();
+            .stream().filter(r -> grade.equals(r.getStudent().getGrade()) && 
+                                  request.currency.equals(r.getCurrency())).toList();
         if (!existing.isEmpty()) {
             return ResponseEntity.badRequest().body(new BulkFeeAssignmentResponse(
                 "Fees already assigned!", grade, existing.size(), existing.stream().map(StudentFeeRecordResponse::fromEntity).toList()
@@ -544,8 +597,10 @@ public class StudentFeeRecordController {
         // Call the school-aware grade method for each requested grade
         List<StudentFeeRecord> records = new java.util.ArrayList<>();
         for (String g : request.grades) {
+            // Check for existing records with same currency (allows multiple currencies per term)
             List<StudentFeeRecord> existing = feeRecordService.getFeeRecordsByYearAndTermForCurrentSchool(request.year, request.term)
-                .stream().filter(r -> g.equals(r.getStudent().getGrade())).toList();
+                .stream().filter(r -> g.equals(r.getStudent().getGrade()) && 
+                                      request.currency.equals(r.getCurrency())).toList();
             if (!existing.isEmpty()) {
                 return ResponseEntity.badRequest().body(new BulkFeeAssignmentResponse(
                     "Fees already assigned!", g, existing.size(), existing.stream().map(StudentFeeRecordResponse::fromEntity).toList()
@@ -603,7 +658,9 @@ public class StudentFeeRecordController {
         log.warn("REST request to assign fees to ALL students in current school");
         
         // use the school-aware method (already school-aware in service)
-        List<StudentFeeRecord> existing = feeRecordService.getFeeRecordsByYearAndTermForCurrentSchool(request.year, request.term);
+        // Check for existing records with same currency (allows multiple currencies per term)
+        List<StudentFeeRecord> existing = feeRecordService.getFeeRecordsByYearAndTermForCurrentSchool(request.year, request.term)
+            .stream().filter(r -> request.currency.equals(r.getCurrency())).toList();
         if (!existing.isEmpty()) {
             return ResponseEntity.badRequest().body(new BulkFeeAssignmentResponse(
                 "Fees already assigned!", "All Grades", existing.size(), existing.stream().map(StudentFeeRecordResponse::fromEntity).toList()
@@ -665,8 +722,10 @@ public class StudentFeeRecordController {
         log.info("REST request to assign fees to class: {}", className);
         
         // Use school-aware method so school context is applied
+        // Check for existing records with same currency (allows multiple currencies per term)
         List<StudentFeeRecord> existing = feeRecordService.getFeeRecordsByYearAndTermForCurrentSchool(request.year, request.term)
-            .stream().filter(r -> className.equals(r.getStudent().getClassName())).toList();
+            .stream().filter(r -> className.equals(r.getStudent().getClassName()) && 
+                                  request.currency.equals(r.getCurrency())).toList();
         if (!existing.isEmpty()) {
             return ResponseEntity.badRequest().body(new BulkFeeAssignmentResponse(
                 "Fees already assigned!", className, existing.size(), existing.stream().map(StudentFeeRecordResponse::fromEntity).toList()
@@ -714,8 +773,11 @@ public class StudentFeeRecordController {
         log.info("REST request to assign fees to {} - {}", grade, className);
         
         // Use the school-aware variant which assigns school from context
+        // Check for existing records with same currency (allows multiple currencies per term)
         List<StudentFeeRecord> existing = feeRecordService.getFeeRecordsByYearAndTermForCurrentSchool(request.year, request.term)
-            .stream().filter(r -> grade.equals(r.getStudent().getGrade()) && className.equals(r.getStudent().getClassName())).toList();
+            .stream().filter(r -> grade.equals(r.getStudent().getGrade()) && 
+                                  className.equals(r.getStudent().getClassName()) && 
+                                  request.currency.equals(r.getCurrency())).toList();
         if (!existing.isEmpty()) {
             return ResponseEntity.badRequest().body(new BulkFeeAssignmentResponse(
                 "Fees already assigned!", grade + " - " + className, existing.size(), existing.stream().map(StudentFeeRecordResponse::fromEntity).toList()
@@ -777,8 +839,10 @@ public class StudentFeeRecordController {
         // Use school-aware grade assignment for each form
         List<StudentFeeRecord> records = new java.util.ArrayList<>();
         for (String form : request.grades) {
+            // Check for existing records with same currency (allows multiple currencies per term)
             List<StudentFeeRecord> existing = feeRecordService.getFeeRecordsByYearAndTermForCurrentSchool(request.year, request.term)
-                .stream().filter(r -> form.equals(r.getStudent().getGrade())).toList();
+                .stream().filter(r -> form.equals(r.getStudent().getGrade()) && 
+                                      request.currency.equals(r.getCurrency())).toList();
             if (!existing.isEmpty()) {
                 return ResponseEntity.badRequest().body(new BulkFeeAssignmentResponse(
                     "Fees already assigned!", form, existing.size(), existing.stream().map(StudentFeeRecordResponse::fromEntity).toList()
@@ -928,6 +992,18 @@ public class StudentFeeRecordController {
         public Integer term;
         public String feeCategory;
         public String currency;
+        public BigDecimal tuitionFee;
+        public BigDecimal boardingFee;
+        public BigDecimal developmentLevy;
+        public BigDecimal examFee;
+        public BigDecimal otherFees;
+    }
+
+    /**
+     * Request DTO for updating a fee record
+     */
+    public static class FeeRecordUpdateRequest {
+        public String feeCategory;
         public BigDecimal tuitionFee;
         public BigDecimal boardingFee;
         public BigDecimal developmentLevy;

@@ -228,12 +228,13 @@ public class BankPaymentService {
      * @param studentReference Format: "SCH001-STU-001"
      * @param year Academic year (e.g., 2026)
      * @param term Term number (1, 2, or 3)
+     * @param currency Currency code (USD or ZWG)
      * @return StudentLookupResult with entities
      * @throws IllegalArgumentException if year or term is null/invalid
      */
-    private StudentLookupResult lookupStudentEntitiesInternal(String studentReference, Integer year, Integer term) {
-        log.debug("Looking up student entities for payment: {} (Year: {}, Term: {})", 
-                  studentReference, year, term);
+    private StudentLookupResult lookupStudentEntitiesInternal(String studentReference, Integer year, Integer term, String currency) {
+        log.debug("Looking up student entities for payment: {} (Year: {}, Term: {}, Currency: {})", 
+                  studentReference, year, term, currency);
         
         // Validate year and term
         if (year == null || year < 2020 || year > 2100) {
@@ -289,20 +290,22 @@ public class BankPaymentService {
             throw new IllegalArgumentException("Student does not belong to school " + schoolCode);
         }
         
-        // Find SPECIFIC fee record by year and term (not just latest)
-        // CRITICAL: Student may have multiple fee records - must pay the correct one
+        // Find SPECIFIC fee record by year, term, and currency
+        // CRITICAL: Student may have multiple fee records for same term with different currencies
         List<StudentFeeRecord> allRecords = feeRecordRepository.findByStudentId(student.getId());
         Optional<StudentFeeRecord> feeRecordOpt = allRecords.stream()
-            .filter(record -> year.equals(record.getYear()) && term.equals(record.getTerm()))
+            .filter(record -> year.equals(record.getYear()) && 
+                             term.equals(record.getTerm()) && 
+                             currency.equals(record.getCurrency()))
             .findFirst();
         
         if (feeRecordOpt.isEmpty()) {
-            log.error("No fee record found for student {} (Year: {}, Term: {})", 
-                      studentReference, year, term);
+            log.error("No fee record found for student {} (Year: {}, Term: {}, Currency: {})", 
+                      studentReference, year, term, currency);
             throw new IllegalArgumentException(
-                String.format("No fee record found for student %s in Year %d, Term %d. " +
+                String.format("No fee record found for student %s in Year %d, Term %d, Currency %s. " +
                              "Fee records must be created before accepting payments.", 
-                             studentReference, year, term));
+                             studentReference, year, term, currency));
         }
         
         // Build entity result
@@ -451,9 +454,9 @@ public class BankPaymentService {
         // Validate currency
         validateCurrency(request.getCurrency());
         
-        // Lookup student entities with specific year/term
+        // Lookup student entities with specific year/term/currency
         StudentLookupResult lookup = lookupStudentEntitiesInternal(
-            request.getStudentReference(), request.getYear(), request.getTerm());
+            request.getStudentReference(), request.getYear(), request.getTerm(), request.getCurrency());
         
         // Validate currency matches fee record currency
         if (lookup.getFeeRecord() != null && lookup.getFeeRecord().getCurrency() != null) {
@@ -550,9 +553,9 @@ public class BankPaymentService {
         // Validate currency
         validateCurrency(request.getCurrency());
         
-        // Lookup student entities with specific year/term
+        // Lookup student entities with specific year/term/currency
         StudentLookupResult lookup = lookupStudentEntitiesInternal(
-            request.getStudentReference(), request.getYear(), request.getTerm());
+            request.getStudentReference(), request.getYear(), request.getTerm(), request.getCurrency());
         
         // Validate currency matches fee record currency
         if (lookup.getFeeRecord() != null && lookup.getFeeRecord().getCurrency() != null) {
@@ -720,11 +723,8 @@ public class BankPaymentService {
                 }
                 
             } else {
-                // Enhanced error message with more details
-                String errorMsg = String.format("Response: %s, Message: %s, MSGSTAT: %s", 
-                    bancabcResponse.getResponse(), 
-                    bancabcResponse.getMessage(),
-                    bancabcResponse.getValueByKey("MSGSTAT"));
+                // Enhanced error message with all details including error codes like ST-VALS046
+                String errorMsg = bancabcResponse.getErrorDetails();
                 log.error("Flexcube payment failed: {}", errorMsg);
                 log.error("Full response object: {}", fcResponse);
                 
@@ -1027,6 +1027,28 @@ public class BankPaymentService {
         public String getFlexcubeReference() {
             String xref = getValueByKey("XREF");
             return xref != null ? xref : getValueByKey("FCCREF");
+        }
+        
+        /**
+         * Get detailed error message including all error fields from the response
+         * This includes fields like ST-VALS046, ST-VALS001, etc. which contain the actual error reason
+         */
+        public String getErrorDetails() {
+            if (value == null || value.isEmpty()) {
+                return String.format("Response: %s, Message: %s", response, message);
+            }
+            
+            StringBuilder details = new StringBuilder();
+            details.append(String.format("Response: %s, Message: %s", response, message));
+            
+            // Add all key-value pairs from the response
+            for (java.util.List<String> pair : value) {
+                if (pair.size() == 2) {
+                    details.append(", ").append(pair.get(0)).append(": ").append(pair.get(1));
+                }
+            }
+            
+            return details.toString();
         }
     }
 }

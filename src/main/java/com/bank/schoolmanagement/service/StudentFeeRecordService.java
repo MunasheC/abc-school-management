@@ -1216,6 +1216,62 @@ public class StudentFeeRecordService {
     }
 
     /**
+     * Update fee record for a student by studentId, year, term, and currency
+     * School-aware - only updates fee records for current school
+     */
+    @Transactional
+    public StudentFeeRecord updateFeeRecordForStudent(
+            String studentId,
+            Integer year,
+            Integer term,
+            String currency,
+            String feeCategory,
+            BigDecimal tuitionFee,
+            BigDecimal boardingFee,
+            BigDecimal developmentLevy,
+            BigDecimal examFee,
+            BigDecimal otherFees) {
+        
+        School currentSchool = SchoolContext.getCurrentSchool();
+        log.info("Updating fee record for student {} (year={}, term={}, currency={}) in school: {}", 
+                 studentId, year, term, currency, currentSchool.getSchoolName());
+        
+        // Find student by studentId in current school
+        Student student = studentRepository.findByStudentId(studentId)
+                .orElseThrow(() -> new RuntimeException("Student not found with ID: " + studentId));
+        
+        if (!student.getSchool().equals(currentSchool)) {
+            throw new RuntimeException("Student does not belong to current school");
+        }
+        
+        // Find the specific fee record by year, term, and currency
+        StudentFeeRecord feeRecord = feeRecordRepository.findByStudentId(student.getId())
+                .stream()
+                .filter(r -> r.getYear().equals(year) && r.getTerm().equals(term) && 
+                             r.getSchool().equals(currentSchool) && currency.equals(r.getCurrency()))
+                .findFirst()
+                .orElseThrow(() -> new RuntimeException(
+                    String.format("Fee record not found for student %s (year=%d, term=%d, currency=%s)", 
+                                  studentId, year, term, currency)));
+        
+        // Update fee amounts
+        feeRecord.setFeeCategory(feeCategory);
+        feeRecord.setTuitionFee(tuitionFee);
+        feeRecord.setBoardingFee(boardingFee);
+        feeRecord.setDevelopmentLevy(developmentLevy);
+        feeRecord.setExamFee(examFee);
+        feeRecord.setOtherFees(otherFees);
+        // Note: currency is not updated - it's part of the identifier
+        
+        // Save (calculateTotals runs automatically)
+        StudentFeeRecord updated = feeRecordRepository.save(feeRecord);
+        log.info("Fee record updated successfully for student {}: Gross={}, Net={}, Balance={}", 
+                 studentId, updated.getGrossAmount(), updated.getNetAmount(), updated.getOutstandingBalance());
+        
+        return updated;
+    }
+
+    /**
      * Helper method to assign fees to a list of students
      * Reduces code duplication in bulk assignment methods
      */
@@ -1240,11 +1296,13 @@ public class StudentFeeRecordService {
                 continue;
             }
             
-            // Check if student already has fee record for this term and school
+            // Check if student already has fee record for this term, school, and currency
+            // Now allows multiple fee records per term with different currencies (e.g., USD and ZWG)
             Optional<StudentFeeRecord> existingRecord = feeRecordRepository
                     .findByStudentId(student.getId())
                     .stream()
-                    .filter(r -> r.getYear().equals(year) && r.getTerm().equals(term) && r.getSchool().equals(school))
+                    .filter(r -> r.getYear().equals(year) && r.getTerm().equals(term) && 
+                                 r.getSchool().equals(school) && currency.equals(r.getCurrency()))
                     .findFirst();
             
             StudentFeeRecord feeRecord;
