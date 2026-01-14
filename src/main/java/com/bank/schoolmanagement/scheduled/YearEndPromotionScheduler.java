@@ -49,13 +49,13 @@ public class YearEndPromotionScheduler {
             
             for (AcademicYearConfig config : duePromotions) {
                 try {
-                    log.info("Executing scheduled promotion for school: {} ({})",
-                        config.getSchool().getSchoolName(), config.getAcademicYear());
+                    log.info("Executing scheduled promotion for school: {} ({}, term {})",
+                        config.getSchool().getSchoolName(), config.getYear(), config.getTerm());
                     
                     configService.executePromotion(config);
                     
-                    log.info("Successfully completed promotion for school: {}",
-                        config.getSchool().getSchoolName());
+                    log.info("Successfully completed promotion for school: {} ({}, term {})",
+                        config.getSchool().getSchoolName(), config.getYear(), config.getTerm());
                     
                 } catch (Exception e) {
                     log.error("Failed to execute promotion for school: {} (config ID: {})",

@@ -13,9 +13,7 @@ public class StudentResponse {
     private String nationalId;
     private String grade;
     private String className;
-    private String parentName;
-    private String parentPhone;
-    private String parentEmail;
+    private String guardianNationalId;
     private String address;
     private Boolean active;
     private String completionStatus;
@@ -30,10 +28,9 @@ public class StudentResponse {
         dto.setNationalId(student.getNationalId());
         dto.setGrade(student.getGrade());
         dto.setClassName(student.getClassName());
+        // dto.setGuardianNationalId(student.getGuardian().getNationalId());
         if (student.getGuardian() != null) {
-            dto.setParentName(student.getGuardian().getFullName());
-            dto.setParentPhone(student.getGuardian().getPrimaryPhone());
-            dto.setParentEmail(student.getGuardian().getEmail());
+            dto.setGuardianNationalId(student.getGuardian().getNationalId());
             dto.setAddress(student.getGuardian().getAddress());
         }
         dto.setActive(student.getIsActive());

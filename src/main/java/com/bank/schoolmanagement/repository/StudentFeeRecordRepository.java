@@ -30,10 +30,24 @@ public interface StudentFeeRecordRepository extends JpaRepository<StudentFeeReco
     /**
      * Find ALL fee records by student's studentId field (e.g., STU1733838975353)
      * Returns all historical fee records for the student
+     * WARNING: NOT school-aware - use findBySchoolAndStudent_StudentId instead
      * Spring generates: SELECT * FROM student_fee_records WHERE student_id IN 
      *                   (SELECT id FROM students WHERE student_id = ?)
      */
     List<StudentFeeRecord> findByStudent_StudentId(String studentId);
+    
+    /**
+     * Find ALL fee records by school and student's studentId field (SCHOOL-AWARE)
+     * Returns all historical fee records for the student within the specified school
+     * 
+     * MULTI-TENANT SAFE: Filters by both school and studentId
+     * - Prevents School A from seeing School B's student records
+     * - Student ID "2025001" in School A ≠ "2025001" in School B
+     */
+    List<StudentFeeRecord> findBySchoolAndStudent_StudentId(
+        com.bank.schoolmanagement.entity.School school,
+        String studentId
+    );
     
     /**
      * Find fee records by student ID ordered by creation date (newest first)
@@ -42,10 +56,10 @@ public interface StudentFeeRecordRepository extends JpaRepository<StudentFeeReco
     List<StudentFeeRecord> findByStudentIdOrderByCreatedAtDesc(Long studentId);
 
     /**
-     * Find fee records by term/year
-     * Example: "Term 1 2024", "2024 Academic Year"
+     * Find fee records by year and term
+     * Example: year=2024, term=1
      */
-    List<StudentFeeRecord> findByTermYear(String termYear);
+    List<StudentFeeRecord> findByYearAndTerm(Integer year, Integer term);
 
     /**
      * Find fee records by payment status
@@ -112,9 +126,9 @@ public interface StudentFeeRecordRepository extends JpaRepository<StudentFeeReco
     List<StudentFeeRecord> findByFeeCategoryAndPaymentStatus(String feeCategory, String paymentStatus);
 
     /**
-     * Find records by term/year and payment status
+     * Find records by year, term, and payment status
      */
-    List<StudentFeeRecord> findByTermYearAndPaymentStatus(String termYear, String paymentStatus);
+    List<StudentFeeRecord> findByYearAndTermAndPaymentStatus(Integer year, Integer term, String paymentStatus);
 
     /* ----------------------  MULTI-TENANT QUERIES (School-Aware)  ------------------------- */
 
@@ -128,13 +142,14 @@ public interface StudentFeeRecordRepository extends JpaRepository<StudentFeeReco
     List<StudentFeeRecord> findBySchool(com.bank.schoolmanagement.entity.School school);
 
     /**
-     * Find fee records by school and term/year
+     * Find fee records by school, year, and term
      * 
      * Example: Get all Term 1 2025 fee records for School A
      */
-    List<StudentFeeRecord> findBySchoolAndTermYear(
+    List<StudentFeeRecord> findBySchoolAndYearAndTerm(
         com.bank.schoolmanagement.entity.School school,
-        String termYear
+        Integer year,
+        Integer term
     );
 
     /**
@@ -160,13 +175,14 @@ public interface StudentFeeRecordRepository extends JpaRepository<StudentFeeReco
     );
 
     /**
-     * Find fee records by school, term, and payment status
+     * Find fee records by school, year, term, and payment status
      * 
      * Example: Get all ARREARS for Term 1 2025 in School A
      */
-    List<StudentFeeRecord> findBySchoolAndTermYearAndPaymentStatus(
+    List<StudentFeeRecord> findBySchoolAndYearAndTermAndPaymentStatus(
         com.bank.schoolmanagement.entity.School school,
-        String termYear,
+        Integer year,
+        Integer term,
         String paymentStatus
     );
 

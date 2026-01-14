@@ -34,10 +34,16 @@ public class StudentPromotionRequest {
     private String newClassName;
     
     /**
-     * New academic term/year
-     * Examples: "Term 1 2026", "2026 Academic Year"
+     * New academic year
+     * Example: 2026
      */
-    private String newTermYear;
+    private Integer newYear;
+    
+    /**
+     * New academic term
+     * Example: 1, 2, 3
+     */
+    private Integer newTerm;
     
     /**
      * Should previous term's outstanding balance carry forward?

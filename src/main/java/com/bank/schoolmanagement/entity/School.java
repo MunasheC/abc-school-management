@@ -59,8 +59,10 @@ public class School {
     @Column(name = "school_name", nullable = false)
     private String schoolName;
 
-    @Column(name = "school_type")
-    private String schoolType;  // PRIMARY, SECONDARY, COMBINED
+    @NotBlank(message = "School type is required (PRIMARY, SECONDARY, COMBINED)")
+    @Pattern(regexp = "PRIMARY|SECONDARY|COMBINED", message = "Invalid school type")
+    @Column(name = "school_type", nullable = false)
+    private String schoolType;
 
     @Column(name = "address", length = 500)
     private String address;
@@ -109,9 +111,10 @@ public class School {
 
     /* ----------------------  REGISTRATION & LICENSING  ------------------------- */
 
-    @Column(name = "ministry_registration_number")
+    @NotBlank(message = "Ministry registration number is required")
+    @Column(name = "ministry_registration_number", nullable = false)
     private String ministryRegistrationNumber;
-
+    
     @Column(name = "license_expiry_date")
     private java.time.LocalDate licenseExpiryDate;
 
@@ -119,8 +122,8 @@ public class School {
     private String zimsecCenterNumber;  // For schools offering O/A Level
 
     /* ----------------------  BANKING INFORMATION  ------------------------- */
-
-    @Column(name = "bank_account_number")
+    @NotBlank(message = "Bank account number is required")
+    @Column(name = "bank_account_number", nullable = false)
     private String bankAccountNumber;
 
     @Column(name = "bank_branch")

@@ -2,6 +2,11 @@ package com.bank.schoolmanagement.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -70,13 +75,30 @@ public class StudentFeeRecord {
     @JsonIgnoreProperties({"school", "guardian", "feeRecords", "hibernateLazyInitializer", "handler"})
     private Student student;
 
-    /** Academic term/year for this fee record */
-    @Column(name = "term_year", nullable = false)
-    private String termYear;  // Example: "Term 1 2024", "2024 Academic Year"
+    /** Academic year for this fee record (e.g., 2024, 2025) */
+    @NotNull(message = "Academic year is required")
+    @Min(value = 2000, message = "Year must be at least 2000")
+    @Max(value = 2100, message = "Year must be before 2100")
+    @Column(name = "year", nullable = false)
+    private Integer year;
 
-    /** Fee category: Day Scholar, Boarder, etc. */
-    @Column(name = "fee_category")
+    /** Academic term for this fee record (1, 2, 3) */
+    @NotNull(message = "Term is required")
+    @Min(value = 1, message = "Term must be 1, 2, or 3")
+    @Max(value = 3, message = "Term must be 1, 2, or 3")
+    private Integer term;
+
+    /** Fee category: DAY_SCHOLAR or BOARDING */
+    @NotBlank(message = "Fee category is required")
+    @Pattern(regexp = "^(DAY_SCHOLAR|BOARDING)$", message = "Fee category must be either 'DAY_SCHOLAR' or 'BOARDING'")
+    @Column(name = "fee_category", nullable = false)
     private String feeCategory;
+    
+    /** Currency for this fee record: USD or ZWG */
+    @NotBlank(message = "Currency is required")
+    @Pattern(regexp = "^(USD|ZWG)$", message = "Currency must be either 'USD' or 'ZWG'")
+    @Column(name = "currency", nullable = false, length = 3)
+    private String currency = "USD";
 
     /* ----------------------  FEE COMPONENTS  ------------------------- */
 

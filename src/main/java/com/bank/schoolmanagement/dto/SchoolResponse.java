@@ -19,6 +19,9 @@ public class SchoolResponse {
     private String province;
     private String postalCode;
     private String country;
+    private String bankAccountNumber;
+    private String bankBranch;
+    private String bankAccountName;
     private String subscriptionTier;
     private Boolean isActive;
     private LocalDate onboardingDate;
@@ -40,6 +43,9 @@ public class SchoolResponse {
         dto.setProvince(s.getProvince());
         dto.setPostalCode(s.getPostalCode());
         dto.setCountry(s.getCountry());
+        dto.setBankAccountNumber(s.getBankAccountNumber());
+        dto.setBankBranch(s.getBankBranch());
+        dto.setBankAccountName(s.getBankAccountName());
         dto.setSubscriptionTier(s.getSubscriptionTier());
         dto.setIsActive(s.getIsActive());
         dto.setOnboardingDate(s.getOnboardingDate());

@@ -8,7 +8,6 @@ import com.bank.schoolmanagement.entity.AcademicYearConfig;
 import com.bank.schoolmanagement.entity.School;
 import com.bank.schoolmanagement.repository.AcademicYearConfigRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -17,7 +16,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -44,22 +42,23 @@ public class AcademicYearConfigService {
         
         // Check if configuration already exists
         Optional<AcademicYearConfig> existingOpt = configRepository
-            .findBySchoolAndAcademicYear(currentSchool, request.getAcademicYear());
+            .findBySchoolAndYear(currentSchool, request.getYear());
         
         AcademicYearConfig config;
         if (existingOpt.isPresent()) {
             config = existingOpt.get();
-            log.info("Updating existing academic year config for {}", request.getAcademicYear());
+            log.info("Updating existing academic year config for {}", request.getYear());
         } else {
             config = new AcademicYearConfig();
             config.setSchool(currentSchool);
             config.setCreatedBy(createdBy);
-            log.info("Creating new academic year config for {}", request.getAcademicYear());
+            log.info("Creating new academic year config for {}", request.getYear());
         }
         
-        config.setAcademicYear(request.getAcademicYear());
+        config.setYear(request.getYear());
+        config.setTerm(request.getTerm());
         config.setEndOfYearDate(request.getEndOfYearDate());
-        config.setNextAcademicYear(request.getNextAcademicYear());
+        config.setNextYear(request.getNextYear());
         config.setCarryForwardBalances(request.getCarryForwardBalances());
         config.setNotes(request.getNotes());
         
@@ -152,36 +151,24 @@ public class AcademicYearConfigService {
     @Transactional
     public YearEndPromotionSummary executePromotion(AcademicYearConfig config) {
         log.info("Executing year-end promotion for config ID: {} ({})", 
-            config.getId(), config.getAcademicYear());
+            config.getId(), config.getYear());
         
         config.setPromotionStatus("IN_PROGRESS");
         configRepository.save(config);
         
         try {
             // Build promotion request from config
+            // NOTE: Fee structures are NOT used during automatic promotion
+            // Fee assignment must be done manually via StudentFeeRecordController
             YearEndPromotionRequest promotionRequest = new YearEndPromotionRequest();
-            promotionRequest.setNewAcademicYear(config.getNextAcademicYear());
+            promotionRequest.setNewYear(config.getNextYear());
             promotionRequest.setCarryForwardBalances(config.getCarryForwardBalances());
             promotionRequest.setExcludedStudentIds(null); // None excluded by default
-            promotionRequest.setPromotionNotes("Automated year-end promotion for " + config.getAcademicYear());
+            promotionRequest.setPromotionNotes("Automated year-end promotion for " + config.getYear());
             
-            // Deserialize fee structures
-            try {
-                if (config.getFeeStructuresJson() != null) {
-                    Map<String, YearEndPromotionRequest.FeeStructure> feeStructures = 
-                        objectMapper.readValue(config.getFeeStructuresJson(), 
-                            new TypeReference<Map<String, YearEndPromotionRequest.FeeStructure>>() {});
-                    promotionRequest.setFeeStructures(feeStructures);
-                }
-                if (config.getDefaultFeeStructureJson() != null) {
-                    YearEndPromotionRequest.FeeStructure defaultStructure = 
-                        objectMapper.readValue(config.getDefaultFeeStructureJson(), 
-                            YearEndPromotionRequest.FeeStructure.class);
-                    promotionRequest.setDefaultFeeStructure(defaultStructure);
-                }
-            } catch (JsonProcessingException e) {
-                throw new RuntimeException("Failed to deserialize fee structures: " + e.getMessage(), e);
-            }
+            // Fee structures intentionally not set - manual fee assignment required
+            promotionRequest.setFeeStructures(null);
+            promotionRequest.setDefaultFeeStructure(null);
             
             // Execute promotion using StudentService
             YearEndPromotionSummary summary = studentService.performYearEndPromotion(promotionRequest);
@@ -197,6 +184,14 @@ public class AcademicYearConfigService {
             log.info("Year-end promotion completed for config ID: {}. Promoted: {}, Completed: {}, Errors: {}",
                 config.getId(), summary.getPromotedCount(), summary.getCompletedCount(), summary.getErrorCount());
             
+            // Automatic rollover: Create next year's configuration
+            try {
+                createNextYearConfig(config);
+            } catch (Exception e) {
+                log.error("Failed to create automatic rollover config for next year", e);
+                // Don't fail the entire promotion if rollover fails
+            }
+            
             return summary;
             
         } catch (Exception e) {
@@ -205,5 +200,56 @@ public class AcademicYearConfigService {
             configRepository.save(config);
             throw new RuntimeException("Promotion failed: " + e.getMessage(), e);
         }
+    }
+    
+    /**
+     * Automatically create next year's academic configuration after successful promotion
+     * 
+     * ROLLOVER LOGIC:
+     * - Creates config for the year after nextYear (e.g., if 2025->2026, creates 2027)
+     * - Copies fee structures from current config
+     * - Sets end-of-year date to same month/day but next year
+     * - Admin can modify later if needed
+     */
+    private void createNextYearConfig(AcademicYearConfig completedConfig) throws JsonProcessingException {
+        School school = completedConfig.getSchool();
+        Integer rolloverYear = completedConfig.getNextYear();
+        
+        // Check if config for next year already exists
+        Optional<AcademicYearConfig> existingConfig = configRepository.findBySchoolAndYear(school, rolloverYear);
+        if (existingConfig.isPresent()) {
+            log.info("Academic year config for {} already exists, skipping automatic rollover", rolloverYear);
+            return;
+        }
+        
+        log.info("Creating automatic rollover config for year {}", rolloverYear);
+        
+        AcademicYearConfig nextYearConfig = new AcademicYearConfig();
+        nextYearConfig.setSchool(school);
+        nextYearConfig.setYear(rolloverYear);
+        nextYearConfig.setTerm(1); // Reset to term 1 for new year
+        
+        // Set end-of-year date: same month/day as current config, but next year
+        LocalDate newEndDate = completedConfig.getEndOfYearDate().plusYears(1);
+        nextYearConfig.setEndOfYearDate(newEndDate);
+        
+        // Set next year to current nextYear + 1
+        nextYearConfig.setNextYear(rolloverYear + 1);
+        
+        // Copy other settings
+        nextYearConfig.setCarryForwardBalances(completedConfig.getCarryForwardBalances());
+        nextYearConfig.setFeeStructuresJson(completedConfig.getFeeStructuresJson());
+        nextYearConfig.setDefaultFeeStructureJson(completedConfig.getDefaultFeeStructureJson());
+        
+        // Set as scheduled for automatic promotion
+        nextYearConfig.setPromotionStatus("SCHEDULED");
+        nextYearConfig.setIsActive(true);
+        nextYearConfig.setCreatedBy("SYSTEM_ROLLOVER");
+        nextYearConfig.setNotes("Automatically created after " + completedConfig.getYear() + " promotion. Admin can modify as needed.");
+        
+        configRepository.save(nextYearConfig);
+        
+        log.info("Successfully created automatic rollover config for year {} with end date: {}", 
+            rolloverYear, newEndDate);
     }
 }

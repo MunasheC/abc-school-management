@@ -10,9 +10,9 @@ import java.time.LocalDateTime;
 public class PaymentResponse {
     private Long id;
     private String paymentReference;
-    private Long studentId;
+    private String studentId;
     private String studentName;
-    private Long schoolId;
+    private String schoolCode;
     private String schoolName;
     private Long feeRecordId;
     private BigDecimal amount;
@@ -21,7 +21,7 @@ public class PaymentResponse {
     private String transactionReference;
     private String bankTransactionId;
     private LocalDateTime paymentDate;
-    private BigDecimal newOutstandingBalance;
+    // private BigDecimal newOutstandingBalance;
     private String receivedBy;
     private String paymentNotes;
 
@@ -30,16 +30,16 @@ public class PaymentResponse {
         dto.setId(payment.getId());
         dto.setPaymentReference(payment.getPaymentReference());
         if (payment.getStudent() != null) {
-            dto.setStudentId(payment.getStudent().getId());
+            dto.setStudentId(payment.getStudent().getStudentId());
             dto.setStudentName(payment.getStudent().getFullName());
         }
         if (payment.getSchool() != null) {
-            dto.setSchoolId(payment.getSchool().getId());
+            dto.setSchoolCode(payment.getSchool().getSchoolCode());
             dto.setSchoolName(payment.getSchool().getSchoolName());
         }
         if (payment.getFeeRecord() != null) {
             dto.setFeeRecordId(payment.getFeeRecord().getId());
-            dto.setNewOutstandingBalance(payment.getFeeRecord().getOutstandingBalance());
+            // dto.setNewOutstandingBalance(payment.getFeeRecord().getOutstandingBalance());
         }
         dto.setAmount(payment.getAmount());
         dto.setPaymentMethod(payment.getPaymentMethod() != null ? payment.getPaymentMethod().name() : null);

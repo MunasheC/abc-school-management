@@ -14,6 +14,9 @@ public class GuardianResponse {
     private String occupation;
     private String employer;
     private Boolean active;
+    private String bankAccountNumber;
+    private String bankName;
+    private String bankBranch;
 
     public static GuardianResponse fromEntity(Guardian g) {
         GuardianResponse dto = new GuardianResponse();
@@ -26,6 +29,9 @@ public class GuardianResponse {
         dto.setOccupation(g.getOccupation());
         dto.setEmployer(g.getEmployer());
         dto.setActive(g.getIsActive());
+        dto.setBankAccountNumber(g.getBankAccountNumber());
+        dto.setBankName(g.getBankName());
+        dto.setBankBranch(g.getBankBranch());
         return dto;
     }
 }

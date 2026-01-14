@@ -1133,7 +1133,7 @@ public class StudentService {
     public com.bank.schoolmanagement.dto.YearEndPromotionSummary performYearEndPromotion(
             com.bank.schoolmanagement.dto.YearEndPromotionRequest request) {
         
-        log.info("Starting year-end promotion for academic year: {}", request.getNewAcademicYear());
+        log.info("Starting year-end promotion for academic year: {}, term: {}", request.getNewYear(), request.getNewTerm());
         
         School currentSchool = SchoolContext.getCurrentSchool();
         if (currentSchool == null) {
@@ -1218,7 +1218,8 @@ public class StudentService {
                             try {
                                 createFeeRecordForPromotedStudent(
                                     updated, 
-                                    request.getNewAcademicYear(),
+                                    request.getNewYear(),
+                                    request.getNewTerm(),
                                     request.getFeeStructures(),
                                     request.getDefaultFeeStructure(),
                                     request.getCarryForwardBalances()
@@ -1258,8 +1259,9 @@ public class StudentService {
             
             // Set final summary message
             summary.setMessage(String.format(
-                "Year-end promotion complete for %s: %d students promoted, %d completed, %d errors",
-                request.getNewAcademicYear(),
+                "Year-end promotion complete for %s Term %s: %d students promoted, %d completed, %d errors",
+                request.getNewYear(),
+                request.getNewTerm(),
                 summary.getPromotedCount(),
                 summary.getCompletedCount(),
                 summary.getErrorCount()
@@ -1283,7 +1285,8 @@ public class StudentService {
      */
     private void createFeeRecordForPromotedStudent(
             Student student,
-            String academicYear,
+            Integer year,
+            Integer term,
             java.util.Map<String, com.bank.schoolmanagement.dto.YearEndPromotionRequest.FeeStructure> feeStructures,
             com.bank.schoolmanagement.dto.YearEndPromotionRequest.FeeStructure defaultFeeStructure,
             Boolean carryForwardBalances) {
@@ -1315,7 +1318,8 @@ public class StudentService {
         // Create new fee record with all required parameters
         studentFeeRecordService.createPromotionFeeRecord(
             student,
-            academicYear,
+            year,
+            term,
             previousBalance,
             feeStructure.getTuitionFee(),
             feeStructure.getBoardingFee(),

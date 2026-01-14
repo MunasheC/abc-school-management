@@ -36,6 +36,7 @@ public class StudentFeeRecordService {
     private final StudentFeeRecordRepository feeRecordRepository;
     private final StudentRepository studentRepository;
     private final AuditTrailService auditTrailService;
+    
 
     /**
      * Create fee record for student
@@ -47,8 +48,8 @@ public class StudentFeeRecordService {
      */
     @Transactional
     public StudentFeeRecord createFeeRecord(StudentFeeRecord feeRecord) {
-        log.info("Creating fee record for student ID: {}, Term: {}", 
-                 feeRecord.getStudent().getId(), feeRecord.getTermYear());
+        log.info("Creating fee record for student ID: {}, Year: {}, Term: {}", 
+                 feeRecord.getStudent().getId(), feeRecord.getYear(), feeRecord.getTerm());
         
         StudentFeeRecord saved = feeRecordRepository.save(feeRecord);
         log.info("Fee record created with ID: {}, Outstanding: {}", 
@@ -61,9 +62,9 @@ public class StudentFeeRecordService {
             "CREATE_FEE_RECORD",
             "StudentFeeRecord",
             saved.getId() != null ? saved.getId().toString() : null,
-            String.format("Created fee record for student ID %s, Term: %s, Total: %s",
+            String.format("Created fee record for student ID %s, Year: %d, Term: %d, Total: %s",
                 saved.getStudent() != null ? saved.getStudent().getId() : "UNKNOWN",
-                saved.getTermYear(), saved.getNetAmount())
+                saved.getYear(), saved.getTerm(), saved.getNetAmount())
         );
         
         return saved;
@@ -91,12 +92,26 @@ public class StudentFeeRecordService {
     /**
      * Get ALL fee records for a student by their studentId field (e.g., STU1733838975353)
      * 
+     * WARNING: NOT school-aware - use getFeeRecordsByStudentReferenceForCurrentSchool instead
      * CHANGE: Returns List instead of Optional (OneToMany relationship)
      * Returns complete financial history (all terms/years)
      */
     public List<StudentFeeRecord> getFeeRecordsByStudentReference(String studentId) {
         log.debug("Fetching all fee records for student reference: {}", studentId);
         return feeRecordRepository.findByStudent_StudentId(studentId);
+    }
+    
+    /**
+     * Get ALL fee records for a student by studentId FOR CURRENT SCHOOL (SCHOOL-AWARE)
+     * 
+     * MULTI-TENANT SAFE: Filters by current school context
+     * Returns complete financial history (all terms/years) for the student in current school
+     */
+    public List<StudentFeeRecord> getFeeRecordsByStudentReferenceForCurrentSchool(String studentId) {
+        School currentSchool = SchoolContext.getCurrentSchool();
+        log.debug("Fetching all fee records for student reference: {} in school: {}", 
+                  studentId, currentSchool.getSchoolName());
+        return feeRecordRepository.findBySchoolAndStudent_StudentId(currentSchool, studentId);
     }
     
     /**
@@ -110,11 +125,11 @@ public class StudentFeeRecordService {
     }
 
     /**
-     * Get fee records for a specific term/year
+     * Get fee records for a specific year and term
      */
-    public List<StudentFeeRecord> getFeeRecordsByTermYear(String termYear) {
-        log.debug("Fetching fee records for term: {}", termYear);
-        return feeRecordRepository.findByTermYear(termYear);
+    public List<StudentFeeRecord> getFeeRecordsByYearAndTerm(Integer year, Integer term) {
+        log.debug("Fetching fee records for year: {}, term: {}", year, term);
+        return feeRecordRepository.findByYearAndTerm(year, term);
     }
 
     /**
@@ -127,10 +142,23 @@ public class StudentFeeRecordService {
 
     /**
      * Get fee records by fee category
+     * WARNING: NOT school-aware - use getFeeRecordsByFeeCategoryForCurrentSchool instead
      */
     public List<StudentFeeRecord> getFeeRecordsByFeeCategory(String feeCategory) {
         log.debug("Fetching fee records for category: {}", feeCategory);
         return feeRecordRepository.findByFeeCategory(feeCategory);
+    }
+
+    /**
+     * Get fee records by fee category FOR CURRENT SCHOOL (SCHOOL-AWARE)
+     * 
+     * MULTI-TENANT SAFE: Filters by current school context
+     */
+    public List<StudentFeeRecord> getFeeRecordsByFeeCategoryForCurrentSchool(String feeCategory) {
+        School currentSchool = SchoolContext.getCurrentSchool();
+        log.debug("Fetching fee records for category: {} in school: {}", 
+                  feeCategory, currentSchool.getSchoolName());
+        return feeRecordRepository.findBySchoolAndFeeCategory(currentSchool, feeCategory);
     }
 
     /**
@@ -171,9 +199,9 @@ public class StudentFeeRecordService {
         return feeRecordRepository.findById(id)
                 .map(existing -> {
                     // Capture before state
-                    String beforeValue = String.format("Net Amount: %s, Paid: %s, Outstanding: %s, Category: %s, Term: %s",
+                    String beforeValue = String.format("Net Amount: %s, Paid: %s, Outstanding: %s, Category: %s, Year: %d, Term: %d",
                         existing.getNetAmount(), existing.getAmountPaid(), 
-                        existing.getOutstandingBalance(), existing.getFeeCategory(), existing.getTermYear());
+                        existing.getOutstandingBalance(), existing.getFeeCategory(), existing.getYear(), existing.getTerm());
                     
                     // Update fee components
                     if (updatedRecord.getTuitionFee() != null) {
@@ -208,8 +236,11 @@ public class StudentFeeRecordService {
                     if (updatedRecord.getFeeCategory() != null) {
                         existing.setFeeCategory(updatedRecord.getFeeCategory());
                     }
-                    if (updatedRecord.getTermYear() != null) {
-                        existing.setTermYear(updatedRecord.getTermYear());
+                    if (updatedRecord.getYear() != null) {
+                        existing.setYear(updatedRecord.getYear());
+                    }
+                    if (updatedRecord.getTerm() != null) {
+                        existing.setTerm(updatedRecord.getTerm());
                     }
                     if (updatedRecord.getBursarNotes() != null) {
                         existing.setBursarNotes(updatedRecord.getBursarNotes());
@@ -220,9 +251,9 @@ public class StudentFeeRecordService {
                     log.info("Fee record updated, new outstanding: {}", saved.getOutstandingBalance());
                     
                     // Capture after state
-                    String afterValue = String.format("Net Amount: %s, Paid: %s, Outstanding: %s, Category: %s, Term: %s",
+                    String afterValue = String.format("Net Amount: %s, Paid: %s, Outstanding: %s, Category: %s, Year: %d, Term: %d",
                         saved.getNetAmount(), saved.getAmountPaid(), 
-                        saved.getOutstandingBalance(), saved.getFeeCategory(), saved.getTermYear());
+                        saved.getOutstandingBalance(), saved.getFeeCategory(), saved.getYear(), saved.getTerm());
                     
                     // Audit trail
                     auditTrailService.logAction(
@@ -231,9 +262,9 @@ public class StudentFeeRecordService {
                         "UPDATE_FEE_RECORD",
                         "StudentFeeRecord",
                         saved.getId().toString(),
-                        String.format("Updated fee record for student ID %s, Term: %s, New Total: %s",
+                        String.format("Updated fee record for student ID %s, Year: %d, Term: %d, New Total: %s",
                             saved.getStudent() != null ? saved.getStudent().getId() : "UNKNOWN",
-                            saved.getTermYear(), saved.getNetAmount()),
+                            saved.getYear(), saved.getTerm(), saved.getNetAmount()),
                         beforeValue,
                         afterValue
                     );
@@ -405,11 +436,11 @@ public class StudentFeeRecordService {
     }
 
     /**
-     * Get records by term and payment status
+     * Get records by year, term and payment status
      */
-    public List<StudentFeeRecord> getRecordsByTermAndStatus(String termYear, String status) {
-        log.debug("Fetching records for term {} with status {}", termYear, status);
-        return feeRecordRepository.findByTermYearAndPaymentStatus(termYear, status);
+    public List<StudentFeeRecord> getRecordsByYearAndTermAndStatus(Integer year, Integer term, String status) {
+        log.debug("Fetching records for year {} term {} with status {}", year, term, status);
+        return feeRecordRepository.findByYearAndTermAndPaymentStatus(year, term, status);
     }
 
     /**
@@ -465,7 +496,8 @@ public class StudentFeeRecordService {
      * - Each student gets individual fee record with same amounts
      * 
      * @param grade The grade to assign fees to (e.g., "Grade 5")
-     * @param termYear The term/year (e.g., "2025-Term1")
+     * @param year The academic year (e.g., 2025)
+     * @param term The academic term (e.g., 1, 2, 3)
      * @param feeCategory The fee category (e.g., "Boarder", "Day Scholar")
      * @param tuitionFee Tuition fee amount
      * @param boardingFee Boarding fee amount (0 for day scholars)
@@ -477,7 +509,8 @@ public class StudentFeeRecordService {
     @Transactional
     public List<StudentFeeRecord> assignFeesToGrade(
             String grade,
-            String termYear,
+            Integer year,
+            Integer term,
             String feeCategory,
             BigDecimal tuitionFee,
             BigDecimal boardingFee,
@@ -485,7 +518,7 @@ public class StudentFeeRecordService {
             BigDecimal examFee,
             BigDecimal otherFees) {
         
-        log.info("Assigning fees to all students in grade: {}, term: {}", grade, termYear);
+        log.info("Assigning fees to all students in grade: {}, year: {}, term: {}", grade, year, term);
         
         // Get all active students in the grade
         List<Student> students = studentRepository.findByGrade(grade);
@@ -499,11 +532,13 @@ public class StudentFeeRecordService {
                 continue;
             }
             
-            // Check if student already has fee record for this term
+            // Check if student already has fee record for this year and term
             Optional<StudentFeeRecord> existingRecord = getLatestFeeRecordForStudent(student.getId());
             
             StudentFeeRecord feeRecord;
-            if (existingRecord.isPresent() && existingRecord.get().getTermYear().equals(termYear)) {
+            if (existingRecord.isPresent() && 
+                existingRecord.get().getYear().equals(year) && 
+                existingRecord.get().getTerm().equals(term)) {
                 // Update existing record
                 feeRecord = existingRecord.get();
                 log.debug("Updating existing fee record for student: {}", student.getStudentId());
@@ -511,7 +546,8 @@ public class StudentFeeRecordService {
                 // Create new record
                 feeRecord = new StudentFeeRecord();
                 feeRecord.setStudent(student);
-                feeRecord.setTermYear(termYear);
+                feeRecord.setYear(year);
+                feeRecord.setTerm(term);
                 log.debug("Creating new fee record for student: {}", student.getStudentId());
             }
             
@@ -546,7 +582,8 @@ public class StudentFeeRecordService {
      * - Or when setting fees for primary vs secondary school
      * 
      * @param grades List of grades (e.g., ["Grade 1", "Grade 2", "Grade 3"])
-     * @param termYear Term/year
+     * @param year Academic year
+     * @param term Academic term
      * @param feeCategory Fee category
      * @param tuitionFee Tuition amount
      * @param boardingFee Boarding amount
@@ -558,7 +595,8 @@ public class StudentFeeRecordService {
     @Transactional
     public List<StudentFeeRecord> assignFeesToMultipleGrades(
             List<String> grades,
-            String termYear,
+            Integer year,
+            Integer term,
             String feeCategory,
             BigDecimal tuitionFee,
             BigDecimal boardingFee,
@@ -566,13 +604,13 @@ public class StudentFeeRecordService {
             BigDecimal examFee,
             BigDecimal otherFees) {
         
-        log.info("Assigning fees to {} grades for term: {}", grades.size(), termYear);
+        log.info("Assigning fees to {} grades for year: {}, term: {}", grades.size(), year, term);
         
         List<StudentFeeRecord> allRecords = new ArrayList<>();
         
         for (String grade : grades) {
             List<StudentFeeRecord> gradeRecords = assignFeesToGrade(
-                grade, termYear, feeCategory, 
+                grade, year, term, feeCategory, 
                 tuitionFee, boardingFee, developmentLevy, 
                 examFee, otherFees
             );
@@ -595,7 +633,8 @@ public class StudentFeeRecordService {
      */
     @Transactional
     public List<StudentFeeRecord> assignFeesToAllStudents(
-            String termYear,
+            Integer year,
+            Integer term,
             String feeCategory,
             BigDecimal tuitionFee,
             BigDecimal boardingFee,
@@ -603,7 +642,7 @@ public class StudentFeeRecordService {
             BigDecimal examFee,
             BigDecimal otherFees) {
         
-        log.info("Assigning fees to ALL students for term: {}", termYear);
+        log.info("Assigning fees to ALL students for year: {}, term: {}", year, term);
         
         List<Student> allStudents = studentRepository.findByIsActiveTrue();
         log.info("Found {} active students in school", allStudents.size());
@@ -614,12 +653,13 @@ public class StudentFeeRecordService {
             Optional<StudentFeeRecord> existingRecord = getLatestFeeRecordForStudent(student.getId());
             
             StudentFeeRecord feeRecord;
-            if (existingRecord.isPresent() && existingRecord.get().getTermYear().equals(termYear)) {
+            if (existingRecord.isPresent() && existingRecord.get().getYear().equals(year) && existingRecord.get().getTerm().equals(term)) {
                 feeRecord = existingRecord.get();
             } else {
                 feeRecord = new StudentFeeRecord();
                 feeRecord.setStudent(student);
-                feeRecord.setTermYear(termYear);
+                feeRecord.setYear(year);
+                feeRecord.setTerm(term);
             }
             
             feeRecord.setFeeCategory(feeCategory);
@@ -662,7 +702,8 @@ public class StudentFeeRecordService {
     @Transactional
     public List<StudentFeeRecord> assignFeesToClass(
             String className,
-            String termYear,
+            Integer year,
+            Integer term,
             String feeCategory,
             BigDecimal tuitionFee,
             BigDecimal boardingFee,
@@ -670,7 +711,7 @@ public class StudentFeeRecordService {
             BigDecimal examFee,
             BigDecimal otherFees) {
         
-        log.info("Assigning fees to class: {}, term: {}", className, termYear);
+        log.info("Assigning fees to class: {}, year: {}, term: {}", className, year, term);
         
         List<Student> students = studentRepository.findByClassName(className);
         log.info("Found {} students in class: {}", students.size(), className);
@@ -686,13 +727,14 @@ public class StudentFeeRecordService {
             Optional<StudentFeeRecord> existingRecord = getLatestFeeRecordForStudent(student.getId());
             
             StudentFeeRecord feeRecord;
-            if (existingRecord.isPresent() && existingRecord.get().getTermYear().equals(termYear)) {
+            if (existingRecord.isPresent() && existingRecord.get().getYear().equals(year) && existingRecord.get().getTerm().equals(term)) {
                 feeRecord = existingRecord.get();
                 log.debug("Updating existing fee record for student: {}", student.getStudentId());
             } else {
                 feeRecord = new StudentFeeRecord();
                 feeRecord.setStudent(student);
-                feeRecord.setTermYear(termYear);
+                feeRecord.setYear(year);
+                feeRecord.setTerm(term);
                 log.debug("Creating new fee record for student: {}", student.getStudentId());
             }
             
@@ -730,7 +772,8 @@ public class StudentFeeRecordService {
     public List<StudentFeeRecord> assignFeesToGradeAndClass(
             String grade,
             String className,
-            String termYear,
+            Integer year,
+            Integer term,
             String feeCategory,
             BigDecimal tuitionFee,
             BigDecimal boardingFee,
@@ -738,7 +781,7 @@ public class StudentFeeRecordService {
             BigDecimal examFee,
             BigDecimal otherFees) {
         
-        log.info("Assigning fees to grade: {}, class: {}, term: {}", grade, className, termYear);
+        log.info("Assigning fees to grade: {}, class: {}, year: {}, term: {}", grade, className, year, term);
         
         List<Student> students = studentRepository.findByGradeAndClassName(grade, className);
         log.info("Found {} students in {} - {}", students.size(), grade, className);
@@ -753,12 +796,13 @@ public class StudentFeeRecordService {
             Optional<StudentFeeRecord> existingRecord = getLatestFeeRecordForStudent(student.getId());
             
             StudentFeeRecord feeRecord;
-            if (existingRecord.isPresent() && existingRecord.get().getTermYear().equals(termYear)) {
+            if (existingRecord.isPresent() && existingRecord.get().getYear().equals(year) && existingRecord.get().getTerm().equals(term)) {
                 feeRecord = existingRecord.get();
             } else {
                 feeRecord = new StudentFeeRecord();
                 feeRecord.setStudent(student);
-                feeRecord.setTermYear(termYear);
+                feeRecord.setYear(year);
+                feeRecord.setTerm(term);
             }
             
             feeRecord.setFeeCategory(feeCategory);
@@ -793,7 +837,8 @@ public class StudentFeeRecordService {
     @Transactional
     public List<StudentFeeRecord> assignFeesToForms(
             List<String> forms,
-            String termYear,
+            Integer year,
+            Integer term,
             String feeCategory,
             BigDecimal tuitionFee,
             BigDecimal boardingFee,
@@ -801,13 +846,13 @@ public class StudentFeeRecordService {
             BigDecimal examFee,
             BigDecimal otherFees) {
         
-        log.info("Assigning fees to {} forms for term: {}", forms.size(), termYear);
+        log.info("Assigning fees to {} forms for year: {}, term: {}", forms.size(), year, term);
         
         List<StudentFeeRecord> allRecords = new ArrayList<>();
         
         for (String form : forms) {
             List<StudentFeeRecord> formRecords = assignFeesToGrade(
-                form, termYear, feeCategory,
+                form, year, term, feeCategory,
                 tuitionFee, boardingFee, developmentLevy,
                 examFee, otherFees
             );
@@ -845,12 +890,12 @@ public class StudentFeeRecordService {
     }
 
     /**
-     * Get fee records by term for current school
+     * Get fee records by year and term for current school
      */
-    public List<StudentFeeRecord> getFeeRecordsByTermForCurrentSchool(String termYear) {
+    public List<StudentFeeRecord> getFeeRecordsByYearAndTermForCurrentSchool(Integer year, Integer term) {
         School currentSchool = SchoolContext.getCurrentSchool();
-        log.debug("Fetching fee records for term {} in school: {}", termYear, currentSchool.getSchoolName());
-        return feeRecordRepository.findBySchoolAndTermYear(currentSchool, termYear);
+        log.debug("Fetching fee records for year {} term {} in school: {}", year, term, currentSchool.getSchoolName());
+        return feeRecordRepository.findBySchoolAndYearAndTerm(currentSchool, year, term);
     }
 
     /**
@@ -872,12 +917,12 @@ public class StudentFeeRecordService {
     }
 
     /**
-     * Get arrears by term for current school
+     * Get arrears by year and term for current school
      */
-    public List<StudentFeeRecord> getArrearsByTermForCurrentSchool(String termYear) {
+    public List<StudentFeeRecord> getArrearsByYearAndTermForCurrentSchool(Integer year, Integer term) {
         School currentSchool = SchoolContext.getCurrentSchool();
-        log.debug("Fetching arrears for term {} in school: {}", termYear, currentSchool.getSchoolName());
-        return feeRecordRepository.findBySchoolAndTermYearAndPaymentStatus(currentSchool, termYear, "ARREARS");
+        log.debug("Fetching arrears for year {} term {} in school: {}", year, term, currentSchool.getSchoolName());
+        return feeRecordRepository.findBySchoolAndYearAndTermAndPaymentStatus(currentSchool, year, term, "ARREARS");
     }
 
     /**
@@ -1018,8 +1063,11 @@ public class StudentFeeRecordService {
                     if (updatedRecord.getFeeCategory() != null) {
                         existing.setFeeCategory(updatedRecord.getFeeCategory());
                     }
-                    if (updatedRecord.getTermYear() != null) {
-                        existing.setTermYear(updatedRecord.getTermYear());
+                    if (updatedRecord.getYear() != null) {
+                        existing.setYear(updatedRecord.getYear());
+                    }
+                    if (updatedRecord.getTerm() != null) {
+                        existing.setTerm(updatedRecord.getTerm());
                     }
                     if (updatedRecord.getBursarNotes() != null) {
                         existing.setBursarNotes(updatedRecord.getBursarNotes());
@@ -1064,8 +1112,10 @@ public class StudentFeeRecordService {
     @Transactional
     public List<StudentFeeRecord> assignFeesToGradeForCurrentSchool(
             String grade,
-            String termYear,
+            Integer year,
+            Integer term,
             String feeCategory,
+            String currency,
             BigDecimal tuitionFee,
             BigDecimal boardingFee,
             BigDecimal developmentLevy,
@@ -1079,7 +1129,7 @@ public class StudentFeeRecordService {
         log.info("Found {} students in grade {} for school {}", 
                  students.size(), grade, currentSchool.getSchoolName());
         
-        return assignFeesToStudentList(students, currentSchool, termYear, feeCategory,
+        return assignFeesToStudentList(students, currentSchool, year, term, feeCategory, currency,
                                       tuitionFee, boardingFee, developmentLevy, examFee, otherFees);
     }
 
@@ -1089,8 +1139,10 @@ public class StudentFeeRecordService {
     @Transactional
     public List<StudentFeeRecord> assignFeesToClassForCurrentSchool(
             String className,
-            String termYear,
+            Integer year,
+            Integer term,
             String feeCategory,
+            String currency,
             BigDecimal tuitionFee,
             BigDecimal boardingFee,
             BigDecimal developmentLevy,
@@ -1104,7 +1156,7 @@ public class StudentFeeRecordService {
         log.info("Found {} students in class {} for school {}",
                  students.size(), className, currentSchool.getSchoolName());
         
-        return assignFeesToStudentList(students, currentSchool, termYear, feeCategory,
+        return assignFeesToStudentList(students, currentSchool, year, term, feeCategory, currency,
                                       tuitionFee, boardingFee, developmentLevy, examFee, otherFees);
     }
 
@@ -1115,8 +1167,10 @@ public class StudentFeeRecordService {
     public List<StudentFeeRecord> assignFeesToGradeAndClassForCurrentSchool(
             String grade,
             String className,
-            String termYear,
+            Integer year,
+            Integer term,
             String feeCategory,
+            String currency,
             BigDecimal tuitionFee,
             BigDecimal boardingFee,
             BigDecimal developmentLevy,
@@ -1132,7 +1186,7 @@ public class StudentFeeRecordService {
         log.info("Found {} students in {} - {} for school {}",
                  students.size(), grade, className, currentSchool.getSchoolName());
         
-        return assignFeesToStudentList(students, currentSchool, termYear, feeCategory,
+        return assignFeesToStudentList(students, currentSchool, year, term, feeCategory, currency,
                                       tuitionFee, boardingFee, developmentLevy, examFee, otherFees);
     }
 
@@ -1141,8 +1195,10 @@ public class StudentFeeRecordService {
      */
     @Transactional
     public List<StudentFeeRecord> assignFeesToAllStudentsForCurrentSchool(
-            String termYear,
+            Integer year,
+            Integer term,
             String feeCategory,
+            String currency,
             BigDecimal tuitionFee,
             BigDecimal boardingFee,
             BigDecimal developmentLevy,
@@ -1155,7 +1211,7 @@ public class StudentFeeRecordService {
         List<Student> students = studentRepository.findBySchool(currentSchool, Pageable.unpaged()).getContent();
         log.info("Found {} students in school {}", students.size(), currentSchool.getSchoolName());
         
-        return assignFeesToStudentList(students, currentSchool, termYear, feeCategory,
+        return assignFeesToStudentList(students, currentSchool, year, term, feeCategory, currency,
                                       tuitionFee, boardingFee, developmentLevy, examFee, otherFees);
     }
 
@@ -1166,8 +1222,10 @@ public class StudentFeeRecordService {
     private List<StudentFeeRecord> assignFeesToStudentList(
             List<Student> students,
             School school,
-            String termYear,
+            Integer year,
+            Integer term,
             String feeCategory,
+            String currency,
             BigDecimal tuitionFee,
             BigDecimal boardingFee,
             BigDecimal developmentLevy,
@@ -1186,7 +1244,7 @@ public class StudentFeeRecordService {
             Optional<StudentFeeRecord> existingRecord = feeRecordRepository
                     .findByStudentId(student.getId())
                     .stream()
-                    .filter(r -> r.getTermYear().equals(termYear) && r.getSchool().equals(school))
+                    .filter(r -> r.getYear().equals(year) && r.getTerm().equals(term) && r.getSchool().equals(school))
                     .findFirst();
             
             StudentFeeRecord feeRecord;
@@ -1199,7 +1257,8 @@ public class StudentFeeRecordService {
                 feeRecord = new StudentFeeRecord();
                 feeRecord.setSchool(school);
                 feeRecord.setStudent(student);
-                feeRecord.setTermYear(termYear);
+                feeRecord.setYear(year);
+                feeRecord.setTerm(term);
                 feeRecord.setPreviousBalance(BigDecimal.ZERO);
                 feeRecord.setAmountPaid(BigDecimal.ZERO);
                 log.debug("Creating new fee record for student: {}", student.getStudentId());
@@ -1207,6 +1266,7 @@ public class StudentFeeRecordService {
             
             // Set fee amounts
             feeRecord.setFeeCategory(feeCategory);
+            feeRecord.setCurrency(currency);
             feeRecord.setTuitionFee(tuitionFee);
             feeRecord.setBoardingFee(boardingFee);
             feeRecord.setDevelopmentLevy(developmentLevy);
@@ -1249,7 +1309,8 @@ public class StudentFeeRecordService {
     @Transactional
     public StudentFeeRecord createPromotionFeeRecord(
             Student student,
-            String termYear,
+            Integer year,
+            Integer term,
             BigDecimal previousBalance,
             BigDecimal tuitionFee,
             BigDecimal boardingFee,
@@ -1261,13 +1322,14 @@ public class StudentFeeRecordService {
             String feeCategory) {
         
         log.info("Creating promotion fee record for student: {}, Term: {}, Previous balance: {}", 
-            student.getStudentId(), termYear, previousBalance);
+            student.getStudentId(), term, previousBalance);
         
         // Create new fee record (OneToMany relationship allows multiple records per student)
         StudentFeeRecord feeRecord = new StudentFeeRecord();
         feeRecord.setStudent(student);
         feeRecord.setSchool(student.getSchool());
-        feeRecord.setTermYear(termYear);
+        feeRecord.setYear(year);
+        feeRecord.setTerm(term);
         feeRecord.setFeeCategory(feeCategory != null ? feeCategory : "STANDARD");
         
         // Set fee components
@@ -1296,8 +1358,8 @@ public class StudentFeeRecordService {
         // Save (calculateTotals runs automatically via @PrePersist)
         StudentFeeRecord saved = feeRecordRepository.save(feeRecord);
         
-        log.info("Created promotion fee record - Student: {}, Term: {}, Net Amount: {}, Outstanding: {}", 
-            student.getStudentId(), termYear, saved.getNetAmount(), saved.getOutstandingBalance());
+        log.info("Created promotion fee record - Student: {}, Year: {}, Term: {}, Net Amount: {}, Outstanding: {}", 
+            student.getStudentId(), year, term, saved.getNetAmount(), saved.getOutstandingBalance());
         
         // Audit trail
         auditTrailService.logAction(
@@ -1306,10 +1368,11 @@ public class StudentFeeRecordService {
             "CREATE_PROMOTION_FEE_RECORD",
             "StudentFeeRecord",
             saved.getId().toString(),
-            String.format("Created promotion fee record for student %s (ID: %s), Term: %s, Amount: %s, Previous Balance: %s",
+            String.format("Created promotion fee record for student %s (ID: %s), Year: %s, Term: %s, Amount: %s, Previous Balance: %s",
                 student.getFirstName() + " " + student.getLastName(),
                 student.getStudentId(),
-                termYear,
+                year,
+                term,
                 saved.getNetAmount(),
                 previousBalance != null ? previousBalance : BigDecimal.ZERO)
         );

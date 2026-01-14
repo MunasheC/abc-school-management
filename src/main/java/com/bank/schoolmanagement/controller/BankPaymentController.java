@@ -183,15 +183,23 @@ public class BankPaymentController {
      * Record payment at bank teller counter (Option A)
      * Used by: Bank teller after parent pays at counter
      * 
+     * IMPORTANT: year and term are REQUIRED to specify which fee record to pay
+     * - Students may have multiple fee records (one per term)
+     * - Payment must be applied to the correct term
+     * - Currency must be specified (USD or ZWG) and must match fee record currency
+     * 
      * Request body:
      * {
      *   "studentReference": "SCH001-STU-001",
+     *   "year": 2026,
+     *   "term": 1,
+     *   "currency": "USD",
      *   "amount": 200.00,
      *   "bankBranch": "Branch 005 - Harare Central",
      *   "tellerName": "John Ncube",
      *   "parentAccountNumber": "1234567890",
      *   "bankTransactionId": "BNK-TXN-789456",
-     *   "paymentNotes": "Parent payment at branch"
+     *   "paymentNotes": "Parent payment at branch - Term 1 fees"
      * }
      * 
      * Response: Payment confirmation with receipt details

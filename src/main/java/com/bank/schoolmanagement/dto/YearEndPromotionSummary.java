@@ -28,7 +28,8 @@ public class YearEndPromotionSummary {
     private Integer errorCount;
     
     // Academic year promoted to
-    private String newAcademicYear;
+    private Integer newYear;
+    private Integer newTerm;
     
     // Breakdown per grade/form
     private Map<String, GradePromotionStats> gradeBreakdown = new HashMap<>();

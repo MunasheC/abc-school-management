@@ -17,16 +17,14 @@ import java.time.LocalDateTime;
 public class StudentFeeRecordResponse {
     private Long id;
     // Student info (simplified)
-    private Long studentId;
-    private String studentReference;
+    private String studentId;
     private String studentName;
     private String grade;
     private String className;
     private String nationalId;
     // Academic info
-    private String academicYear;
-    private String term;
-    private String termYear;
+    private Integer year;
+    private Integer term;
     private String feeCategory;
     // Fee components
     private BigDecimal tuitionFee;
@@ -45,6 +43,7 @@ public class StudentFeeRecordResponse {
     private BigDecimal previousBalance;
     private BigDecimal amountPaid;
     private BigDecimal outstandingBalance;
+    private String currency;
     // Status
     private String paymentStatus;
     private Boolean isActive;
@@ -56,16 +55,14 @@ public class StudentFeeRecordResponse {
         StudentFeeRecordResponse dto = new StudentFeeRecordResponse();
         dto.setId(entity.getId());
         if (entity.getStudent() != null) {
-            dto.setStudentId(entity.getStudent().getId());
-            dto.setStudentReference(entity.getStudent().getStudentId());
+            dto.setStudentId(entity.getStudent().getStudentId());
             dto.setStudentName(entity.getStudent().getFirstName() + " " + entity.getStudent().getLastName());
             dto.setGrade(entity.getStudent().getGrade());
             dto.setClassName(entity.getStudent().getClassName());
             dto.setNationalId(entity.getStudent().getNationalId());
         }
-        dto.setAcademicYear(entity.getTermYear());
-        dto.setTerm(null); // No term field in entity
-        dto.setTermYear(entity.getTermYear());
+        dto.setYear(entity.getYear());
+        dto.setTerm(entity.getTerm());
         dto.setFeeCategory(entity.getFeeCategory());
         dto.setTuitionFee(entity.getTuitionFee());
         dto.setBoardingFee(entity.getBoardingFee());
@@ -81,6 +78,7 @@ public class StudentFeeRecordResponse {
         dto.setPreviousBalance(entity.getPreviousBalance());
         dto.setAmountPaid(entity.getAmountPaid());
         dto.setOutstandingBalance(entity.getOutstandingBalance());
+        dto.setCurrency(entity.getCurrency());
         dto.setPaymentStatus(entity.getPaymentStatus());
         dto.setIsActive(entity.getIsActive());
         dto.setCreatedAt(entity.getCreatedAt());

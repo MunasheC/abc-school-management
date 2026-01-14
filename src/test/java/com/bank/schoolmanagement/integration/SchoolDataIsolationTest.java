@@ -413,7 +413,7 @@ public class SchoolDataIsolationTest {
     private StudentFeeRecord createFeeRecord(Student student, BigDecimal amount) {
         StudentFeeRecord feeRecord = new StudentFeeRecord();
         feeRecord.setStudent(student);
-        feeRecord.setTermYear("2025-Term1");
+        feeRecord.setYear(2026);
         feeRecord.setFeeCategory("Regular");
         feeRecord.setTuitionFee(amount);
         feeRecord.setBoardingFee(BigDecimal.ZERO);

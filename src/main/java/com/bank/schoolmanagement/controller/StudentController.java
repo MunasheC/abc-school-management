@@ -436,8 +436,8 @@ public class StudentController {
             @RequestBody StudentPromotionRequest promotionRequest) {
         
         try {
-            log.info("Promoting student ID {} to grade: {}, term: {}", 
-                id, promotionRequest.getNewGrade(), promotionRequest.getNewTermYear());
+            log.info("Promoting student ID {} to grade: {}, year: {}, term: {}", 
+                id, promotionRequest.getNewGrade(), promotionRequest.getNewYear(), promotionRequest.getNewTerm());
             
             // 1. Get current fee record to check outstanding balance
             final java.math.BigDecimal previousBalance;
@@ -467,7 +467,8 @@ public class StudentController {
             // 3. Create new fee record for promoted grade/term
             StudentFeeRecord newFeeRecord = feeRecordService.createPromotionFeeRecord(
                 promotedStudent,
-                promotionRequest.getNewTermYear(),
+                promotionRequest.getNewYear(),
+                promotionRequest.getNewTerm(),
                 previousBalance,
                 promotionRequest.getTuitionFee(),
                 promotionRequest.getBoardingFee(),
@@ -486,7 +487,8 @@ public class StudentController {
                 promotedStudent.getLastName(),
                 promotionRequest.getNewGrade(), // We don't have old grade here, using new for now
                 promotedStudent.getGrade(),
-                promotionRequest.getNewTermYear(),
+                promotionRequest.getNewYear(),
+                promotionRequest.getNewTerm(),
                 newFeeRecord.getOutstandingBalance()
             );
             
@@ -495,7 +497,8 @@ public class StudentController {
                 put("student", StudentResponse.fromEntity(promotedStudent));
                 put("newFeeRecord", new java.util.HashMap<String, Object>() {{
                     put("id", newFeeRecord.getId());
-                    put("termYear", newFeeRecord.getTermYear());
+                    put("year", newFeeRecord.getYear());
+                    put("term", newFeeRecord.getTerm());
                     put("netAmount", newFeeRecord.getNetAmount());
                     put("previousBalance", previousBalance);
                     put("outstandingBalance", newFeeRecord.getOutstandingBalance());
@@ -542,8 +545,8 @@ public class StudentController {
             @Valid @RequestBody StudentPromotionRequest promotionRequest) {
         
         try {
-            log.info("Promoting student {} to grade: {}, term: {}", 
-                studentId, promotionRequest.getNewGrade(), promotionRequest.getNewTermYear());
+            log.info("Promoting student {} to grade: {}, year: {}, term: {}", 
+                studentId, promotionRequest.getNewGrade(), promotionRequest.getNewYear(), promotionRequest.getNewTerm());
             
             // 1. Find student by studentId in current school context
             java.util.Optional<Student> studentOpt = studentService.getStudentByStudentId(studentId);
@@ -584,7 +587,8 @@ public class StudentController {
             // 4. Create new fee record for promoted grade/term
             StudentFeeRecord newFeeRecord = feeRecordService.createPromotionFeeRecord(
                 promotedStudent,
-                promotionRequest.getNewTermYear(),
+                promotionRequest.getNewYear(),
+                promotionRequest.getNewTerm(),
                 previousBalance,
                 promotionRequest.getTuitionFee(),
                 promotionRequest.getBoardingFee(),
@@ -604,7 +608,8 @@ public class StudentController {
                 studentId,
                 oldGrade,
                 promotedStudent.getGrade(),
-                promotionRequest.getNewTermYear(),
+                promotionRequest.getNewYear(),
+                promotionRequest.getNewTerm(),
                 newFeeRecord.getOutstandingBalance()
             );
             
@@ -615,7 +620,8 @@ public class StudentController {
                 put("newGrade", promotedStudent.getGrade());
                 put("newFeeRecord", new java.util.HashMap<String, Object>() {{
                     put("id", newFeeRecord.getId());
-                    put("termYear", newFeeRecord.getTermYear());
+                    put("year", newFeeRecord.getYear());
+                    put("term", newFeeRecord.getTerm());
                     put("netAmount", newFeeRecord.getNetAmount());
                     put("previousBalance", previousBalance);
                     put("outstandingBalance", newFeeRecord.getOutstandingBalance());
@@ -671,8 +677,8 @@ public class StudentController {
             @RequestBody com.bank.schoolmanagement.dto.StudentDemotionRequest demotionRequest) {
         
         try {
-            log.info("Demoting student ID {} back to grade: {}, term: {}", 
-                id, demotionRequest.getDemotedGrade(), demotionRequest.getAcademicYear());
+            log.info("Demoting student ID {} back to grade: {}, year: {}, term: {}", 
+                id, demotionRequest.getDemotedGrade(), demotionRequest.getYear(), demotionRequest.getTerm());
             
             // 1. Get current student state
             Student student = studentService.getStudentByIdForCurrentSchool(id)
@@ -707,7 +713,8 @@ public class StudentController {
             // 4. Create new fee record for repeated grade
             StudentFeeRecord newFeeRecord = feeRecordService.createPromotionFeeRecord(
                 demotedStudent,
-                demotionRequest.getAcademicYear(),
+                demotionRequest.getYear(),
+                demotionRequest.getTerm(),
                 previousBalance,
                 demotionRequest.getTuitionFee(),
                 demotionRequest.getBoardingFee(),
@@ -728,7 +735,8 @@ public class StudentController {
                 oldGrade,
                 demotedStudent.getGrade(),
                 demotionRequest.getReason(),
-                demotionRequest.getAcademicYear(),
+                demotionRequest.getYear(),
+                demotionRequest.getTerm(),
                 newFeeRecord.getOutstandingBalance()
             );
             
@@ -740,7 +748,8 @@ public class StudentController {
                 put("reason", demotionRequest.getReason());
                 put("newFeeRecord", new java.util.HashMap<String, Object>() {{
                     put("id", newFeeRecord.getId());
-                    put("termYear", newFeeRecord.getTermYear());
+                    put("year", newFeeRecord.getYear());
+                    put("term", newFeeRecord.getTerm());
                     put("netAmount", newFeeRecord.getNetAmount());
                     put("previousBalance", previousBalance);
                     put("outstandingBalance", newFeeRecord.getOutstandingBalance());
@@ -799,8 +808,8 @@ public class StudentController {
             @RequestBody StudentPromotionRequest promotionRequest) {
         
         try {
-            log.info("Starting bulk promotion: {} → {}, Term: {}", 
-                currentGrade, promotionRequest.getNewGrade(), promotionRequest.getNewTermYear());
+            log.info("Starting bulk promotion: {} → {}, Year: {}, Term: {}", 
+                currentGrade, promotionRequest.getNewGrade(), promotionRequest.getNewYear(), promotionRequest.getNewTerm());
             
             // Get all students in the current grade
             java.util.List<Student> studentsToPromote = 
@@ -848,7 +857,8 @@ public class StudentController {
                     // Create new fee record
                     feeRecordService.createPromotionFeeRecord(
                         promoted,
-                        promotionRequest.getNewTermYear(),
+                        promotionRequest.getNewYear(),
+                        promotionRequest.getNewTerm(),
                         previousBalance,
                         promotionRequest.getTuitionFee(),
                         promotionRequest.getBoardingFee(),
@@ -976,13 +986,13 @@ public class StudentController {
     public ResponseEntity<?> performYearEndPromotion(
             @Valid @RequestBody com.bank.schoolmanagement.dto.YearEndPromotionRequest request) {
         
-        log.info("REST request for year-end promotion: academic year {}", request.getNewAcademicYear());
+        log.info("REST request for year-end promotion: academic year {}", request.getNewYear());
         
         try {
             // Validate request
-            if (request.getNewAcademicYear() == null || request.getNewAcademicYear().isBlank()) {
+            if (request.getNewYear() == null && request.getNewTerm() == null || request.getNewYear() == 0 && request.getNewTerm() == 0) {
                 return ResponseEntity.badRequest()
-                    .body("Academic year is required");
+                    .body("Academic year and term are required");
             }
             
             // Perform atomic year-end promotion

@@ -44,7 +44,7 @@ public class AcademicYearConfigController {
             @RequestBody AcademicYearConfigRequest request,
             Principal principal) {
         
-        log.info("Creating/updating academic year config for: {}", request.getAcademicYear());
+        log.info("Creating/updating academic year config for: {}", request.getYear());
         
         AcademicYearConfig config = configService.createOrUpdateConfig(request, principal.getName());
         

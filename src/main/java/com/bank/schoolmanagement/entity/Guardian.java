@@ -31,6 +31,10 @@ import java.util.List;
         @UniqueConstraint(
             name = "uk_school_guardian_phone",
             columnNames = {"school_id", "primary_phone"}
+        ),
+        @UniqueConstraint(
+            name = "uk_school_guardian_national_id",
+            columnNames = {"school_id", "national_id"}
         )
     }
 )
@@ -43,6 +47,10 @@ public class Guardian {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @NotBlank(message = "National ID is required")
+    @Column(name = "national_id", nullable = false)
+    private String nationalId;
 
     @NotBlank(message = "Guardian name is required")
     @Size(max = 100)
@@ -62,14 +70,42 @@ public class Guardian {
     @Column(name = "email")
     private String email;
 
-    @Column(name = "address", length = 500)
+    @NotBlank(message = "Address is required")
+    @Column(name = "address", length = 500, nullable = false)
     private String address;
 
-    @Column(name = "occupation")
+    @NotBlank(message = "Occupation is required")
+    @Column(name = "occupation", nullable = false)
     private String occupation;
 
-    @Column(name = "employer")
+    @NotBlank(message = "Employer is required")
+    @Column(name = "employer", nullable = false)
     private String employer;
+
+    /* ----------------------  BANKING INFORMATION  ------------------------- */
+
+    /**
+     * Guardian's bank account number for payment processing
+     * Used for automatic fee payments and reconciliation
+     */
+    @Column(name = "bank_account_number", length = 50)
+    private String bankAccountNumber;
+
+    /**
+     * Name of the bank where guardian holds account
+     * Example: "FBC Bank", "CBZ Bank"
+     */
+    @Column(name = "bank_name", length = 100)
+    private String bankName;
+
+    /**
+     * Bank branch where account is held
+     * Example: "Harare Main Branch", "Bulawayo Branch"
+     */
+    @Column(name = "bank_branch", length = 100)
+    private String bankBranch;
+
+    /* ----------------------  RELATIONSHIPS  ------------------------- */
 
     /**
      * Relationship to School (Multi-Tenancy)

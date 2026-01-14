@@ -4,6 +4,8 @@ import com.bank.schoolmanagement.enums.PaymentMethod;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -77,6 +79,8 @@ public class Payment {
     @JsonIgnore
     private StudentFeeRecord feeRecord;
 
+    @NotNull(message = "Payment amount is required")
+    @DecimalMin(value = "0.01", message = "Amount must be greater than zero")
     @Column(name = "amount", precision = 12, scale = 2, nullable = false)
     private BigDecimal amount;
 
@@ -162,6 +166,43 @@ public class Payment {
     @Column(name = "bank_processed_time")
     private LocalDateTime bankProcessedTime;
 
+    // ========== FLEXCUBE INTEGRATION FIELDS ==========
+
+    /**
+     * Flexcube transaction reference (from TRN_REF_NO)
+     * This is Flexcube's internal transaction ID
+     * Critical for: Bank reconciliation and dispute resolution
+     * Example: "FLX-2026-789456"
+     */
+    @Column(name = "flexcube_reference", length = 100)
+    private String flexcubeReference;
+
+    /**
+     * Flexcube value date (when funds actually settle)
+     * May differ from transaction date in some cases
+     * Used for: Accounting and financial reporting
+     * Important for: Knowing when funds are actually available
+     */
+    @Column(name = "flexcube_value_date")
+    private java.time.LocalDate flexcubeValueDate;
+
+    /**
+     * Currency code from Flexcube transaction
+     * Supports multi-currency payments
+     * Example: "USD", "ZWL"
+     */
+    @Column(name = "currency", length = 10)
+    private String currency = "USD";
+
+    /**
+     * Complete Flexcube response stored as JSON
+     * Preserves full audit trail without schema changes
+     * Contains: TRN_DT, MAKER_ID, CHECKER_ID, DRCR_IND, etc.
+     * Used for: Detailed reconciliation and troubleshooting
+     */
+    @Column(name = "flexcube_response", columnDefinition = "TEXT")
+    private String flexcubeResponseJson;
+
     /**
      * Generate payment reference before saving
      */
@@ -205,5 +246,24 @@ public class Payment {
      */
     public boolean hasBankTransactionDetails() {
         return bankTransactionId != null && !bankTransactionId.isBlank();
+    }
+
+    /**
+     * Check if payment has Flexcube transaction data
+     */
+    public boolean hasFlexcubeData() {
+        return flexcubeReference != null && !flexcubeReference.isBlank();
+    }
+
+    /**
+     * Set Flexcube transaction details
+     * Helper method to populate all Flexcube fields at once
+     */
+    public void setFlexcubeDetails(String reference, java.time.LocalDate valueDate, 
+                                   String currency, String responseJson) {
+        this.flexcubeReference = reference;
+        this.flexcubeValueDate = valueDate;
+        this.currency = currency;
+        this.flexcubeResponseJson = responseJson;
     }
 }

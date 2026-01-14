@@ -41,7 +41,9 @@ public class StudentDemotionRequest {
      * Academic year for the repeated grade
      * Example: "2026 Academic Year"
      */
-    private String academicYear;
+    private Integer year;
+
+    private Integer term;
     
     /**
      * Should we carry forward the outstanding balance from promoted fee record?

@@ -72,6 +72,7 @@ public class ExcelService {
     private final StudentService studentService;
     private final GuardianService guardianService;
     private final StudentFeeRecordService feeRecordService;
+    private final AcademicYearConfigService academicYearConfigService;
 
     /**
      * Helper class to hold parsed student data before saving
@@ -343,8 +344,12 @@ public class ExcelService {
             String feeCategory = getCellValueAsString(row.getCell(9));
             feeRecord.setFeeCategory(feeCategory != null ? feeCategory : "Regular");
             
-            // Set current term/year (customize as needed)
-            feeRecord.setTermYear("2025-Term1");
+            // Set year and term from latest active academic year configuration
+            var activeYear = academicYearConfigService.getLatestActiveConfig()
+                .orElseThrow(() -> new IllegalStateException(
+                    "No active academic year configuration found. Please configure an academic year before importing students."));
+            feeRecord.setYear(activeYear.getYear());
+            feeRecord.setTerm(activeYear.getTerm());
             
             // Column 10-13: Fee components
             feeRecord.setTuitionFee(tuitionFee != null ? tuitionFee : BigDecimal.ZERO);

@@ -112,16 +112,17 @@ public class StudentFeeRecordController {
      * 
      * GET /api/school/fee-records/student-ref/{studentId}
      * 
-     * Returns ALL fee records for the student (all terms/years)
+     * Returns ALL fee records for the student (all terms/years) FOR CURRENT SCHOOL
      * Example: GET /api/school/fee-records/student-ref/2025-5001
      * 
+     * MULTI-TENANT SAFE: Only returns records from current school context
      * NOTE: Changed from single record to list (OneToMany relationship)
      */
-    @GetMapping("/student-ref/{studentId}")
+    @GetMapping("/student-id/{studentId}")
     public ResponseEntity<List<StudentFeeRecordResponse>> getFeeRecordsByStudentReference(@PathVariable String studentId) {
         log.info("REST request to get all fee records for student reference: {}", studentId);
         
-        List<StudentFeeRecord> records = feeRecordService.getFeeRecordsByStudentReference(studentId);
+        List<StudentFeeRecord> records = feeRecordService.getFeeRecordsByStudentReferenceForCurrentSchool(studentId);
         
         if (records.isEmpty()) {
             return ResponseEntity.notFound().build();
@@ -133,58 +134,6 @@ public class StudentFeeRecordController {
             
         return ResponseEntity.ok(response);
     }
-    
-    /**
-     * Convert StudentFeeRecord entity to DTO to avoid circular reference issues
-     */
-//    private StudentFeeRecordResponse StudentFeeRecordResponse.fromEntity(StudentFeeRecord record) {
-//        StudentFeeRecordResponse dto = new StudentFeeRecordResponse();
-//        dto.setId(record.getId());
-//        
-//        // Student info (avoid loading full Student entity)
-//        if (record.getStudent() != null) {
-//            dto.setStudentId(record.getStudent().getId());
-//            dto.setStudentReference(record.getStudent().getStudentId());
-//            dto.setStudentName(record.getStudent().getFirstName() + " " + record.getStudent().getLastName());
-//            dto.setGrade(record.getStudent().getGrade());
-//            dto.setClassName(record.getStudent().getClassName());
-//            dto.setNationalId(record.getStudent().getNationalId());
-//        }
-//        
-//        // Academic info
-//        dto.setTermYear(record.getTermYear());
-//        dto.setFeeCategory(record.getFeeCategory());
-//        
-//        // Fee components
-//        dto.setTuitionFee(record.getTuitionFee());
-//        dto.setBoardingFee(record.getBoardingFee());
-//        dto.setDevelopmentLevy(record.getDevelopmentLevy());
-//        dto.setExamFee(record.getExamFee());
-//        dto.setOtherFees(record.getOtherFees());
-//        
-//        // Discounts
-//        dto.setHasScholarship(record.getHasScholarship());
-//        dto.setScholarshipAmount(record.getScholarshipAmount());
-//        dto.setSiblingDiscount(record.getSiblingDiscount());
-//        dto.setEarlyPaymentDiscount(record.getEarlyPaymentDiscount());
-//        
-//        // Calculated totals
-//        dto.setGrossAmount(record.getGrossAmount());
-//        dto.setNetAmount(record.getNetAmount());
-//        dto.setPreviousBalance(record.getPreviousBalance());
-//        dto.setAmountPaid(record.getAmountPaid());
-//        dto.setOutstandingBalance(record.getOutstandingBalance());
-//        
-//        // Status
-//        dto.setPaymentStatus(record.getPaymentStatus());
-//        dto.setIsActive(record.getIsActive());
-//        
-//        // Timestamps
-//        dto.setCreatedAt(record.getCreatedAt());
-//        dto.setUpdatedAt(record.getUpdatedAt());
-//        
-//        return dto;
-//    }
 
     /**
      * READ - Get fee records by term/year
@@ -193,10 +142,10 @@ public class StudentFeeRecordController {
      * 
      * Example: GET /api/fee-records/term/2025-Term1
      */
-    @GetMapping("/term/{termYear}")
-    public ResponseEntity<List<StudentFeeRecordResponse>> getFeeRecordsByTermYear(@PathVariable String termYear) {
-        log.info("REST request to get fee records for term: {}", termYear);
-        List<StudentFeeRecord> records = feeRecordService.getFeeRecordsByTermYear(termYear);
+    @GetMapping("/year/{year}/term/{term}")
+    public ResponseEntity<List<StudentFeeRecordResponse>> getFeeRecordsByTermYear(@PathVariable Integer year, @PathVariable Integer term) {
+        log.info("REST request to get fee records for year: {}, term: {}", year, term);
+        List<StudentFeeRecord> records = feeRecordService.getFeeRecordsByYearAndTerm(year, term);
         List<StudentFeeRecordResponse> dtos = records.stream().map(StudentFeeRecordResponse::fromEntity).toList();
         return ResponseEntity.ok(dtos);
     }
@@ -242,11 +191,13 @@ public class StudentFeeRecordController {
      * GET /api/fee-records/category/{category}
      * 
      * Example: GET /api/fee-records/category/Boarder
+     * 
+     * MULTI-TENANT SAFE: Only returns records from current school context
      */
     @GetMapping("/category/{category}")
     public ResponseEntity<List<StudentFeeRecordResponse>> getFeeRecordsByCategory(@PathVariable String category) {
         log.info("REST request to get fee records for category: {}", category);
-        List<StudentFeeRecord> records = feeRecordService.getFeeRecordsByFeeCategory(category);
+        List<StudentFeeRecord> records = feeRecordService.getFeeRecordsByFeeCategoryForCurrentSchool(category);
         List<StudentFeeRecordResponse> dtos = records.stream().map(StudentFeeRecordResponse::fromEntity).toList();
         return ResponseEntity.ok(dtos);
     }
@@ -509,6 +460,7 @@ public class StudentFeeRecordController {
      * {
      *   "termYear": "2025-Term1",
      *   "feeCategory": "Boarder",
+     *   "currency": "ZWG",
      *   "tuitionFee": 500.00,
      *   "boardingFee": 300.00,
      *   "developmentLevy": 50.00,
@@ -532,7 +484,7 @@ public class StudentFeeRecordController {
         log.info("REST request to assign fees to grade: {}", grade);
         
         // Use school-aware service method so school is assigned from context
-        List<StudentFeeRecord> existing = feeRecordService.getFeeRecordsByTermForCurrentSchool(request.termYear)
+        List<StudentFeeRecord> existing = feeRecordService.getFeeRecordsByYearAndTermForCurrentSchool(request.year, request.term)
             .stream().filter(r -> grade.equals(r.getStudent().getGrade())).toList();
         if (!existing.isEmpty()) {
             return ResponseEntity.badRequest().body(new BulkFeeAssignmentResponse(
@@ -541,8 +493,10 @@ public class StudentFeeRecordController {
         }
         List<StudentFeeRecord> records = feeRecordService.assignFeesToGradeForCurrentSchool(
             grade,
-            request.termYear,
+            request.year,
+            request.term,
             request.feeCategory,
+            request.currency,
             request.tuitionFee,
             request.boardingFee,
             request.developmentLevy,
@@ -571,6 +525,7 @@ public class StudentFeeRecordController {
      *   "grades": ["Grade 1", "Grade 2", "Grade 3"],
      *   "termYear": "2025-Term1",
      *   "feeCategory": "Day Scholar",
+     *   "currency": "USD",
      *   "tuitionFee": 400.00,
      *   "boardingFee": 0.00,
      *   "developmentLevy": 50.00,
@@ -589,7 +544,7 @@ public class StudentFeeRecordController {
         // Call the school-aware grade method for each requested grade
         List<StudentFeeRecord> records = new java.util.ArrayList<>();
         for (String g : request.grades) {
-            List<StudentFeeRecord> existing = feeRecordService.getFeeRecordsByTermForCurrentSchool(request.termYear)
+            List<StudentFeeRecord> existing = feeRecordService.getFeeRecordsByYearAndTermForCurrentSchool(request.year, request.term)
                 .stream().filter(r -> g.equals(r.getStudent().getGrade())).toList();
             if (!existing.isEmpty()) {
                 return ResponseEntity.badRequest().body(new BulkFeeAssignmentResponse(
@@ -598,8 +553,10 @@ public class StudentFeeRecordController {
             }
             records.addAll(feeRecordService.assignFeesToGradeForCurrentSchool(
                 g,
-                request.termYear,
+                request.year,
+                request.term,
                 request.feeCategory,
+                request.currency,
                 request.tuitionFee,
                 request.boardingFee,
                 request.developmentLevy,
@@ -628,6 +585,7 @@ public class StudentFeeRecordController {
      * {
      *   "termYear": "2025-Term1",
      *   "feeCategory": "Boarder",
+     *   "currency": "ZWG",
      *   "tuitionFee": 500.00,
      *   "boardingFee": 300.00,
      *   "developmentLevy": 50.00,
@@ -645,15 +603,17 @@ public class StudentFeeRecordController {
         log.warn("REST request to assign fees to ALL students in current school");
         
         // use the school-aware method (already school-aware in service)
-        List<StudentFeeRecord> existing = feeRecordService.getFeeRecordsByTermForCurrentSchool(request.termYear);
+        List<StudentFeeRecord> existing = feeRecordService.getFeeRecordsByYearAndTermForCurrentSchool(request.year, request.term);
         if (!existing.isEmpty()) {
             return ResponseEntity.badRequest().body(new BulkFeeAssignmentResponse(
                 "Fees already assigned!", "All Grades", existing.size(), existing.stream().map(StudentFeeRecordResponse::fromEntity).toList()
             ));
         }
         List<StudentFeeRecord> records = feeRecordService.assignFeesToAllStudentsForCurrentSchool(
-            request.termYear,
+            request.year,
+            request.term,
             request.feeCategory,
+            request.currency,
             request.tuitionFee,
             request.boardingFee,
             request.developmentLevy,
@@ -681,6 +641,7 @@ public class StudentFeeRecordController {
      * {
      *   "termYear": "2025-Term1",
      *   "feeCategory": "Boarder",
+     *   "currency": "USD",
      *   "tuitionFee": 500.00,
      *   "boardingFee": 300.00,
      *   "developmentLevy": 50.00,
@@ -704,7 +665,7 @@ public class StudentFeeRecordController {
         log.info("REST request to assign fees to class: {}", className);
         
         // Use school-aware method so school context is applied
-        List<StudentFeeRecord> existing = feeRecordService.getFeeRecordsByTermForCurrentSchool(request.termYear)
+        List<StudentFeeRecord> existing = feeRecordService.getFeeRecordsByYearAndTermForCurrentSchool(request.year, request.term)
             .stream().filter(r -> className.equals(r.getStudent().getClassName())).toList();
         if (!existing.isEmpty()) {
             return ResponseEntity.badRequest().body(new BulkFeeAssignmentResponse(
@@ -713,8 +674,10 @@ public class StudentFeeRecordController {
         }
         List<StudentFeeRecord> records = feeRecordService.assignFeesToClassForCurrentSchool(
             className,
-            request.termYear,
+            request.year,
+            request.term,
             request.feeCategory,
+            request.currency,
             request.tuitionFee,
             request.boardingFee,
             request.developmentLevy,
@@ -751,7 +714,7 @@ public class StudentFeeRecordController {
         log.info("REST request to assign fees to {} - {}", grade, className);
         
         // Use the school-aware variant which assigns school from context
-        List<StudentFeeRecord> existing = feeRecordService.getFeeRecordsByTermForCurrentSchool(request.termYear)
+        List<StudentFeeRecord> existing = feeRecordService.getFeeRecordsByYearAndTermForCurrentSchool(request.year, request.term)
             .stream().filter(r -> grade.equals(r.getStudent().getGrade()) && className.equals(r.getStudent().getClassName())).toList();
         if (!existing.isEmpty()) {
             return ResponseEntity.badRequest().body(new BulkFeeAssignmentResponse(
@@ -761,8 +724,10 @@ public class StudentFeeRecordController {
         List<StudentFeeRecord> records = feeRecordService.assignFeesToGradeAndClassForCurrentSchool(
             grade,
             className,
-            request.termYear,
+            request.year,
+            request.term,
             request.feeCategory,
+            request.currency,
             request.tuitionFee,
             request.boardingFee,
             request.developmentLevy,
@@ -791,6 +756,7 @@ public class StudentFeeRecordController {
      *   "grades": ["Form 1", "Form 2", "Form 3", "Form 4", "Form 5", "Form 6"],
      *   "termYear": "2025-Term1",
      *   "feeCategory": "Boarder",
+     *   "currency": "ZWG",
      *   "tuitionFee": 600.00,
      *   "boardingFee": 350.00,
      *   "developmentLevy": 75.00,
@@ -811,7 +777,7 @@ public class StudentFeeRecordController {
         // Use school-aware grade assignment for each form
         List<StudentFeeRecord> records = new java.util.ArrayList<>();
         for (String form : request.grades) {
-            List<StudentFeeRecord> existing = feeRecordService.getFeeRecordsByTermForCurrentSchool(request.termYear)
+            List<StudentFeeRecord> existing = feeRecordService.getFeeRecordsByYearAndTermForCurrentSchool(request.year, request.term)
                 .stream().filter(r -> form.equals(r.getStudent().getGrade())).toList();
             if (!existing.isEmpty()) {
                 return ResponseEntity.badRequest().body(new BulkFeeAssignmentResponse(
@@ -820,8 +786,10 @@ public class StudentFeeRecordController {
             }
             records.addAll(feeRecordService.assignFeesToGradeForCurrentSchool(
                 form,
-                request.termYear,
+                request.year,
+                request.term,
                 request.feeCategory,
+                request.currency,
                 request.tuitionFee,
                 request.boardingFee,
                 request.developmentLevy,
@@ -851,8 +819,8 @@ public class StudentFeeRecordController {
     public ResponseEntity<BulkFeeAssignmentResponse> bulkUpdateGrade(
             @PathVariable String grade,
             @RequestBody BulkFeeAssignmentRequest update) {
-        log.info("Bulk update fee records for grade: {} term: {}", grade, update.termYear);
-        List<StudentFeeRecord> records = feeRecordService.getFeeRecordsByTermForCurrentSchool(update.termYear)
+        log.info("Bulk update fee records for grade: {} term: {}", grade, update.year, update.term);
+        List<StudentFeeRecord> records = feeRecordService.getFeeRecordsByYearAndTermForCurrentSchool(update.year, update.term)
             .stream().filter(r -> grade.equals(r.getStudent().getGrade())).toList();
         if (records.isEmpty()) {
             return ResponseEntity.notFound().build();
@@ -883,11 +851,11 @@ public class StudentFeeRecordController {
     @PutMapping("/bulk/grades")
     public ResponseEntity<BulkFeeAssignmentResponse> bulkUpdateGrades(
             @RequestBody BulkFeeAssignmentRequestMultiGrade update) {
-        log.info("Bulk update fee records for grades: {} term: {}", update.grades, update.termYear);
+        log.info("Bulk update fee records for grades: {} year{} term: {}", update.grades, update.year, update.term);
         int updated = 0;
         List<StudentFeeRecord> allRecords = new java.util.ArrayList<>();
         for (String grade : update.grades) {
-            List<StudentFeeRecord> records = feeRecordService.getFeeRecordsByTermForCurrentSchool(update.termYear)
+            List<StudentFeeRecord> records = feeRecordService.getFeeRecordsByYearAndTermForCurrentSchool(update.year, update.term)
                 .stream().filter(r -> grade.equals(r.getStudent().getGrade())).toList();
             for (StudentFeeRecord r : records) {
                 if (update.feeCategory != null) r.setFeeCategory(update.feeCategory);
@@ -917,8 +885,8 @@ public class StudentFeeRecordController {
     public ResponseEntity<BulkFeeAssignmentResponse> bulkUpdateClass(
             @PathVariable String className,
             @RequestBody BulkFeeAssignmentRequest update) {
-        log.info("Bulk update fee records for class: {} term: {}", className, update.termYear);
-        List<StudentFeeRecord> records = feeRecordService.getFeeRecordsByTermForCurrentSchool(update.termYear)
+        log.info("Bulk update fee records for class: {} year {} term: {}", className, update.year, update.term);
+        List<StudentFeeRecord> records = feeRecordService.getFeeRecordsByYearAndTermForCurrentSchool(update.year, update.term)
             .stream().filter(r -> className.equals(r.getStudent().getClassName())).toList();
         if (records.isEmpty()) {
             return ResponseEntity.notFound().build();
@@ -956,8 +924,10 @@ public class StudentFeeRecordController {
      * Request DTO for bulk fee assignment (single grade or all students)
      */
     public static class BulkFeeAssignmentRequest {
-        public String termYear;
+        public Integer year;
+        public Integer term;
         public String feeCategory;
+        public String currency;
         public BigDecimal tuitionFee;
         public BigDecimal boardingFee;
         public BigDecimal developmentLevy;
@@ -970,8 +940,10 @@ public class StudentFeeRecordController {
      */
     public static class BulkFeeAssignmentRequestMultiGrade {
         public List<String> grades;
-        public String termYear;
+        public Integer year;
+        public Integer term;
         public String feeCategory;
+        public String currency;
         public BigDecimal tuitionFee;
         public BigDecimal boardingFee;
         public BigDecimal developmentLevy;

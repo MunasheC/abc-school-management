@@ -13,9 +13,10 @@ import java.time.LocalDateTime;
 public class AcademicYearConfigResponse {
     
     private Long id;
-    private String academicYear;
+    private Integer year;
+    private Integer term;
     private LocalDate endOfYearDate;
-    private String nextAcademicYear;
+    private Integer nextYear;
     private Boolean carryForwardBalances;
     private String promotionStatus;
     private LocalDateTime promotionExecutedAt;
@@ -33,9 +34,10 @@ public class AcademicYearConfigResponse {
     public static AcademicYearConfigResponse fromEntity(AcademicYearConfig config) {
         AcademicYearConfigResponse dto = new AcademicYearConfigResponse();
         dto.setId(config.getId());
-        dto.setAcademicYear(config.getAcademicYear());
+        dto.setYear(config.getYear());
+        dto.setTerm(config.getTerm());
         dto.setEndOfYearDate(config.getEndOfYearDate());
-        dto.setNextAcademicYear(config.getNextAcademicYear());
+        dto.setNextYear(config.getNextYear());
         dto.setCarryForwardBalances(config.getCarryForwardBalances());
         dto.setPromotionStatus(config.getPromotionStatus());
         dto.setPromotionExecutedAt(config.getPromotionExecutedAt());

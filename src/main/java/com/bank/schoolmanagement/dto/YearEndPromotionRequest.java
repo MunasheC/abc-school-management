@@ -28,7 +28,9 @@ public class YearEndPromotionRequest {
      * New academic year/term for ALL promoted students
      * Examples: "2026 Academic Year", "Term 1 2026"
      */
-    private String newAcademicYear;
+    private Integer newYear;
+
+    private Integer newTerm;
     
     /**
      * Should outstanding balances carry forward?

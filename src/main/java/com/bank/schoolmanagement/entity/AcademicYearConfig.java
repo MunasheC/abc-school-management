@@ -50,8 +50,11 @@ public class AcademicYearConfig {
      * Academic year identifier
      * Example: "2025/2026", "2026 Academic Year"
      */
-    @Column(name = "academic_year", nullable = false, length = 50)
-    private String academicYear;
+    @Column(name = "academic_year", nullable = false, length = 5)
+    private Integer year;
+
+    @Column(name = "term", nullable = false, length = 1)
+    private Integer term;
     
     /**
      * Date when year-end promotion should be triggered
@@ -64,8 +67,8 @@ public class AcademicYearConfig {
      * New academic year name for promoted students
      * Example: "2026 Academic Year"
      */
-    @Column(name = "next_academic_year", length = 50)
-    private String nextAcademicYear;
+    @Column(name = "next_academic_year", nullable = false, length = 5)
+    private Integer nextYear;
     
     /**
      * Should outstanding balances carry forward to next year?

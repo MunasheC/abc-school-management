@@ -1,6 +1,7 @@
 package com.bank.schoolmanagement.dto;
 
 import com.bank.schoolmanagement.dto.YearEndPromotionRequest.FeeStructure;
+
 import lombok.Data;
 
 import java.time.LocalDate;
@@ -16,7 +17,9 @@ public class AcademicYearConfigRequest {
      * Academic year identifier
      * Example: "2025/2026"
      */
-    private String academicYear;
+    private Integer year;
+
+    private Integer term;
     
     /**
      * Date when automatic promotion should trigger
@@ -28,7 +31,7 @@ public class AcademicYearConfigRequest {
      * New academic year name for promoted students
      * Example: "2026 Academic Year"
      */
-    private String nextAcademicYear;
+    private Integer nextYear;
     
     /**
      * Should balances carry forward?

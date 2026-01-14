@@ -7,6 +7,8 @@ import io.swagger.v3.oas.models.info.License;
 import io.swagger.v3.oas.models.servers.Server;
 import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.security.SecurityScheme;
+import org.springdoc.core.models.GroupedOpenApi;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -24,9 +26,21 @@ import java.util.List;
  * - Request/response examples
  * - Parameter descriptions
  * - Try-it-out functionality
+ * 
+ * FILTERED: Only shows endpoints currently in use (from Postman collection)
+ * 
+ * Server URL is configurable via application.properties:
+ * - api.server.url
+ * - api.server.description
  */
 @Configuration
 public class OpenApiConfig {
+
+    @Value("${api.server.url:http://localhost:8080}")
+    private String serverUrl;
+    
+    @Value("${api.server.description:Development Server}")
+    private String serverDescription;
 
     @Bean
     public OpenAPI schoolManagementOpenAPI() {
@@ -52,11 +66,8 @@ public class OpenApiConfig {
                                 .url("https://opensource.org/licenses/MIT")))
                 .servers(List.of(
                         new Server()
-                                .url("http://localhost:8080")
-                                .description("Local Development Server"),
-                        new Server()
-                                .url("https://api.schoolmanagement.com")
-                                .description("Production Server (if deployed)")
+                                .url(serverUrl)
+                                .description(serverDescription)
                 ))
                 .components(new Components()
                         .addSecuritySchemes("X-School-ID", new SecurityScheme()
@@ -66,5 +77,47 @@ public class OpenApiConfig {
                                 .description("School ID for multi-tenant isolation. " +
                                         "Required for school-specific endpoints. " +
                                         "Example: 1, 2, 3")));
+    }
+
+    /**
+     * Filter endpoints to show only those currently in use
+     * Based on Postman collection endpoints
+     */
+    @Bean
+    public GroupedOpenApi publicApi() {
+        return GroupedOpenApi.builder()
+                .group("active-endpoints")
+                .pathsToMatch(
+                        // Fee Records endpoints
+                        "/api/school/fee-records",
+                        "/api/school/fee-records/{id}",
+                        "/api/school/fee-records/student-id/{studentId}",
+                        "/api/school/fee-records/category/{category}",
+                        "/api/school/fee-records/bulk/forms",
+                        "/api/school/fee-records/bulk/grade/{grade}/class/{className}",
+                        
+                        // Student endpoints
+                        "/api/school/students",
+                        "/api/school/students/{id}",
+                        "/api/school/students/upload-excel",
+                        "/api/school/students/by-student-id/{studentId}",
+                        "/api/school/students/by-studentID/{studentId}/promote",
+                        "/api/school/students/year-end-promotion",
+                        
+                        // Bank Admin endpoints
+                        "/api/bank/admin/schools",
+                        
+                        // Guardian endpoints
+                        "/api/school/guardians",
+                        
+                        // Fee Payment endpoints
+                        "/api/bank/lookup",
+                        "/api/bank/reconciliation/today",
+                        "/api/bank/payment/counter",
+                        
+                        // Audit Trail endpoints
+                        "/api/admin/audit-trail"
+                )
+                .build();
     }
 }

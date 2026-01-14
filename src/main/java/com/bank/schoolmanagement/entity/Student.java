@@ -41,7 +41,7 @@ import java.util.List;
 @Table(name = "students", 
     uniqueConstraints = {
         @UniqueConstraint(
-            name = "uk_school_student", 
+            name = "school_student",
             columnNames = {"school_id", "student_id"}
         )
     }
@@ -84,19 +84,24 @@ public class Student {
     @Column(name = "middle_name", length = 50)
     private String middleName;
 
+    @NotNull(message = "Date of birth is required")
     @Past(message = "Date of birth must be in the past")
-    @Column(name = "date_of_birth")
+    @Column(name = "date_of_birth", nullable = false)
     private LocalDate dateOfBirth;
 
-    @Column(name = "gender")
-    private String gender;  // MALE, FEMALE, OTHER
+    @NotBlank(message = "Gender is required")
+    @Pattern(regexp = "^[MF]$", message = "Gender must be either 'M' or 'F'")
+    @Column(name = "gender", nullable = false)
+    private String gender;  // M (Male) or F (Female)
 
-    @Column(name = "national_id")
+    @NotBlank(message = "National ID is required")
+    @Column(name = "national_id", nullable = false)
     private String nationalId;
 
     /* ----------------------  ACADEMIC INFORMATION  ------------------------- */
 
-    @Column(name = "grade")
+    @NotBlank(message = "Grade is required")
+    @Column(name = "grade", nullable = false)
     private String grade;
 
     @Column(name = "enrollment_date")
@@ -105,7 +110,8 @@ public class Student {
     @Column(name = "admission_number")
     private String admissionNumber;
 
-    @Column(name = "class_name")
+    @NotBlank(message = "Class name is required")
+    @Column(name = "class_name", nullable = false)
     private String className;  // e.g., "5A", "4B"
 
     /* ----------------------  RELATIONSHIPS  ------------------------- */
@@ -135,13 +141,18 @@ public class Student {
      * @ManyToOne - Many students can have one guardian (siblings)
      * This allows siblings to share parent information
      * 
+     * LEARNING: Uses guardian's national_id instead of database id
+     * - More meaningful business key
+     * - Guardian's national ID is unique per school
+     * - Siblings share same guardian via national ID
+     * 
      * LEARNING: fetch = FetchType.LAZY means:
      * - Guardian data not loaded automatically with student
      * - Only loaded when you call student.getGuardian()
      * - Improves performance for queries that don't need guardian info
      */
     @ManyToOne(fetch = FetchType.LAZY, cascade = CascadeType.PERSIST)
-    @JoinColumn(name = "guardian_id")
+    @JoinColumn(name = "guardian_national_id", referencedColumnName = "national_id")
     private Guardian guardian;
 
     /**

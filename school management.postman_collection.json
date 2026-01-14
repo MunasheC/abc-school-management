@@ -1,0 +1,790 @@
+{
+	"info": {
+		"_postman_id": "3d7f95cf-abf9-47f8-8b9b-053de24fd41d",
+		"name": "school management",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "47006914",
+		"_collection_link": "https://munashec-9301680.postman.co/workspace/Blessed-Chihota's-Workspace~9551bd05-7f9b-4018-85e8-26b47bbbff3a/collection/47006914-3d7f95cf-abf9-47f8-8b9b-053de24fd41d?action=share&source=collection_link&creator=47006914"
+	},
+	"item": [
+		{
+			"name": "Fee Records",
+			"item": [
+				{
+					"name": "view all student fee records",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "X-School-ID",
+								"value": "2",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{baseURL}}/api/school/fee-records",
+							"host": [
+								"{{baseURL}}"
+							],
+							"path": [
+								"api",
+								"school",
+								"fee-records"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "View student feeRecord",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-School-Id",
+								"value": "1",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/school/fee-records/student-ref/2025-5001",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"school",
+								"fee-records",
+								"student-ref",
+								"2025-5001"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "view fee records by category",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-School-Id",
+								"value": "4",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{local_baseURL}}/api/school/fee-records/category/DAY_SCHOLAR",
+							"host": [
+								"{{local_baseURL}}"
+							],
+							"path": [
+								"api",
+								"school",
+								"fee-records",
+								"category",
+								"DAY_SCHOLAR"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Edit student fee record",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "X-School-Id",
+								"value": "2",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"tuitionFee\": 600.00,\r\n  \"boardingFee\": 350.00\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseURL}}/api/school/fee-records/164",
+							"host": [
+								"{{baseURL}}"
+							],
+							"path": [
+								"api",
+								"school",
+								"fee-records",
+								"164"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Bulk assign fees",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "X-School-Id",
+								"value": "2",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"grades\": [\"Form 1\",\"Form 2\",\"Form 3\",\"Form 4\",\"Form 5\",\"Form 6\"],\r\n  \"termYear\": \"2025-Term1\",\r\n  \"feeCategory\": \"Boarder\",\r\n  \"tuitionFee\": 550.00,\r\n  \"boardingFee\": 320.00,\r\n  \"developmentLevy\": 60.00,\r\n  \"examFee\": 30.00,\r\n  \"otherFees\": 25.00\r\n}"
+						},
+						"url": {
+							"raw": "{{baseURL}}/api/school/fee-records/bulk/forms",
+							"host": [
+								"{{baseURL}}"
+							],
+							"path": [
+								"api",
+								"school",
+								"fee-records",
+								"bulk",
+								"forms"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Assign fees by student class",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-School-Id",
+								"value": "2",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"termYear\": \"2025-Term2\",\r\n  \"feeCategory\": \"Day Scholar\",\r\n  \"tuitionFee\": 450.00,\r\n  \"boardingFee\": 0.00,\r\n  \"developmentLevy\": 50.00,\r\n  \"examFee\": 25.00,\r\n  \"otherFees\": 15.00\r\n}   ",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseURL}}/api/school/fee-records/bulk/grade/Form 1/class/Form 1A",
+							"host": [
+								"{{baseURL}}"
+							],
+							"path": [
+								"api",
+								"school",
+								"fee-records",
+								"bulk",
+								"grade",
+								"Form 1",
+								"class",
+								"Form 1A"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "view student fees record",
+					"request": {
+						"method": "GET",
+						"header": []
+					},
+					"response": []
+				},
+				{
+					"name": "view fees records by year and term",
+					"request": {
+						"method": "GET",
+						"header": []
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Students",
+			"item": [
+				{
+					"name": "Bulk enrol students",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-School-ID",
+								"value": "3",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": "/C:/Users/bchihota/Desktop/DTI/Dev/school management system/students_sample_bulk_enrol.xlsx"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseURL}}/api/school/students/upload-excel",
+							"host": [
+								"{{baseURL}}"
+							],
+							"path": [
+								"api",
+								"school",
+								"students",
+								"upload-excel"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "delete student",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{local_baseURL}}/api/school/students",
+							"host": [
+								"{{local_baseURL}}"
+							],
+							"path": [
+								"api",
+								"school",
+								"students"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Enrol student",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "X-School-Id",
+								"value": "2",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"firstName\": \"Brian\",\r\n  \"lastName\": \"Khumalo\",\r\n  \"studentId\": \"STU-F3-0002\",\r\n  \"dateOfBirth\": \"2010-08-15\",\r\n  \"gender\": \"M\",\r\n  \"grade\": \"Form 3\",\r\n  \"className\": \"Form 3B\",\r\n  \"admissionNumber\": \"ADM-3002\",\r\n  \"isActive\": true\r\n}"
+						},
+						"url": {
+							"raw": "{{baseURL}}/api/school/students",
+							"host": [
+								"{{baseURL}}"
+							],
+							"path": [
+								"api",
+								"school",
+								"students"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "View students",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-School-Id",
+								"value": "1",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{baseURL}}/api/school/students",
+							"host": [
+								"{{baseURL}}"
+							],
+							"path": [
+								"api",
+								"school",
+								"students"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "View student by ID",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "X-School-Id",
+								"value": "2",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"firstName\": \"Brian\",\r\n  \"lastName\": \"Khumalo\",\r\n  \"studentId\": \"STU-F3-0002\",\r\n  \"dateOfBirth\": \"2010-08-15\",\r\n  \"gender\": \"M\",\r\n  \"grade\": \"Form 3\",\r\n  \"className\": \"Form 3B\",\r\n  \"admissionNumber\": \"ADM-3002\",\r\n  \"isActive\": true\r\n}"
+						},
+						"url": {
+							"raw": "{{baseURL}}/api/school/students/179",
+							"host": [
+								"{{baseURL}}"
+							],
+							"path": [
+								"api",
+								"school",
+								"students",
+								"179"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Edit student",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "X-School-ID",
+								"value": "2",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"nationalId\": \"XX-1111111BXX\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseURL}}/api/school/students/by-student-id/STU-F1-0001",
+							"host": [
+								"{{baseURL}}"
+							],
+							"path": [
+								"api",
+								"school",
+								"students",
+								"by-student-id",
+								"STU-F1-0001"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Promote student",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-School-ID",
+								"value": "1",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"newGrade\": \"Grade 6\",\r\n  \"newClassName\": \"6A\",\r\n  \"newTermYear\": \"Term 1 2026\",\r\n  \"carryForwardBalance\": true,\r\n  \"tuitionFee\": 600.00,\r\n  \"boardingFee\": 0.00,\r\n  \"developmentLevy\": 50.00,\r\n  \"examFee\": 30.00,\r\n  \"otherFees\": 25.00,\r\n  \"scholarshipAmount\": 150.00,\r\n  \"siblingDiscount\": 0.00,\r\n  \"feeCategory\": \"DAY SCHOLAR\",\r\n  \"promotionNotes\": \"Promoted to Grade 6 - excellent academic performance\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/school/students/by-studentID/2025-5001/promote",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"school",
+								"students",
+								"by-studentID",
+								"2025-5001",
+								"promote"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "year_end_promotion",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-School-ID",
+								"value": "1",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"newAcademicYear\": \"2026\",\r\n  \"carryForwardBalances\": false,\r\n  \"promotionNotes\": \"Year-end promotion with fresh start - balances waived\",\r\n  \"excludedStudentIds\": [123, 456],\r\n  \"feeStructures\": {\r\n    \"Grade 2\": {\r\n      \"tuitionFee\": 350.00,\r\n      \"boardingFee\": 0.00,\r\n      \"developmentLevy\": 30.00,\r\n      \"examFee\": 25.00,\r\n      \"otherFees\": 15.00,\r\n      \"defaultScholarship\": 0.00,\r\n      \"defaultSiblingDiscount\": 25.00,\r\n      \"feeCategory\": \"PRIMARY_DAY\"\r\n    },\r\n    \"Grade 3\": {\r\n      \"tuitionFee\": 375.00,\r\n      \"boardingFee\": 0.00,\r\n      \"developmentLevy\": 30.00,\r\n      \"examFee\": 25.00,\r\n      \"otherFees\": 15.00,\r\n      \"defaultScholarship\": 0.00,\r\n      \"defaultSiblingDiscount\": 25.00,\r\n      \"feeCategory\": \"PRIMARY_DAY\"\r\n    },\r\n    \"Grade 4\": {\r\n      \"tuitionFee\": 400.00,\r\n      \"boardingFee\": 0.00,\r\n      \"developmentLevy\": 30.00,\r\n      \"examFee\": 30.00,\r\n      \"otherFees\": 20.00,\r\n      \"defaultScholarship\": 0.00,\r\n      \"defaultSiblingDiscount\": 25.00,\r\n      \"feeCategory\": \"PRIMARY_DAY\"\r\n    },\r\n    \"Grade 5\": {\r\n      \"tuitionFee\": 425.00,\r\n      \"boardingFee\": 0.00,\r\n      \"developmentLevy\": 30.00,\r\n      \"examFee\": 30.00,\r\n      \"otherFees\": 20.00,\r\n      \"defaultScholarship\": 0.00,\r\n      \"defaultSiblingDiscount\": 25.00,\r\n      \"feeCategory\": \"PRIMARY_DAY\"\r\n    },\r\n    \"Grade 6\": {\r\n      \"tuitionFee\": 450.00,\r\n      \"boardingFee\": 0.00,\r\n      \"developmentLevy\": 30.00,\r\n      \"examFee\": 35.00,\r\n      \"otherFees\": 25.00,\r\n      \"defaultScholarship\": 0.00,\r\n      \"defaultSiblingDiscount\": 25.00,\r\n      \"feeCategory\": \"PRIMARY_DAY\"\r\n    },\r\n    \"Grade 7\": {\r\n      \"tuitionFee\": 475.00,\r\n      \"boardingFee\": 0.00,\r\n      \"developmentLevy\": 30.00,\r\n      \"examFee\": 40.00,\r\n      \"otherFees\": 25.00,\r\n      \"defaultScholarship\": 0.00,\r\n      \"defaultSiblingDiscount\": 25.00,\r\n      \"feeCategory\": \"PRIMARY_GRADE_7\"\r\n    }\r\n  },\r\n  \"defaultFeeStructure\": {\r\n    \"tuitionFee\": 350.00,\r\n    \"boardingFee\": 0.00,\r\n    \"developmentLevy\": 30.00,\r\n    \"examFee\": 25.00,\r\n    \"otherFees\": 15.00,\r\n    \"defaultScholarship\": 0.00,\r\n    \"defaultSiblingDiscount\": 0.00,\r\n    \"feeCategory\": \"PRIMARY_DAY\"\r\n  }\r\n}\r\n",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/school/students/year-end-promotion",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"school",
+								"students",
+								"year-end-promotion"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "School",
+			"item": [
+				{
+					"name": "Edit school information",
+					"request": {
+						"method": "GET",
+						"header": []
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Bank Admin",
+			"item": [
+				{
+					"name": "View schools",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseURL}}/api/bank/admin/schools",
+							"host": [
+								"{{baseURL}}"
+							],
+							"path": [
+								"api",
+								"bank",
+								"admin",
+								"schools"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Onboard school",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"schoolName\": \"Northlea Secondary School\",\r\n    \"schoolCode\": \"NORS001\",\r\n    \"schoolType\": \"SECONDARY\",\r\n    \"address\": \"92 Northlea Close, Harare\",\r\n    \"primaryPhone\": \"+263712333333\",\r\n    \"email\": \"contact@northlea.ac.zw\",\r\n    \"headTeacherName\": \"Dr. Patricia Moyo\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseURL}}/api/bank/admin/schools",
+							"host": [
+								"{{baseURL}}"
+							],
+							"path": [
+								"api",
+								"bank",
+								"admin",
+								"schools"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Guardians",
+			"item": [
+				{
+					"name": "View guardians",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "X-School-Id",
+								"value": "1",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"studentId\": \"STU2003\",\r\n    \"firstName\": \"Tendai\",\r\n    \"lastName\": \"Nyathi\",\r\n    \"dateOfBirth\": \"2012-11-08\",\r\n    \"gender\": \"MALE\",\r\n    \"grade\": \"GRADE 7\",\r\n    \"className\": \"7A\",\r\n    \"guardianFullName\": \"Mr. Peter Nyathi\",\r\n    \"guardianPhone\": \"+263712666666\",\r\n    \"guardianEmail\": \"peter.nyathi@email.com\",\r\n    \"guardianAddress\": \"40 Greendale North, Harare\"\r\n}"
+						},
+						"url": {
+							"raw": "{{baseURL}}/api/school/guardians",
+							"host": [
+								"{{baseURL}}"
+							],
+							"path": [
+								"api",
+								"school",
+								"guardians"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Fee Payment",
+			"item": [
+				{
+					"name": "lookup_feestatus",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{ \"studentReference\": \"MABS001-STU-F1-0001\" }",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseURL}}/api/bank/lookup",
+							"host": [
+								"{{baseURL}}"
+							],
+							"path": [
+								"api",
+								"bank",
+								"lookup"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "today_fee_payments",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8080/api/bank/reconciliation/today",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"bank",
+								"reconciliation",
+								"today"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "fee_payment",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-School-ID",
+								"value": "1",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n        \"studentReference\": \"GRPS001-2025-5001\",\r\n        \"amount\": 595.00,\r\n        \"bankBranch\": \"Branch 005 - Harare Central\",\r\n        \"tellerName\": \"John Ncube\",\r\n        \"parentAccountNumber\": \"1234567890\",\r\n        \"bankTransactionId\": \"BNK-TXN-XXXX\",\r\n        \"paymentNotes\": \"Parent payment at branch\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "http://localhost:8080/api/bank/payment/counter",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8080",
+							"path": [
+								"api",
+								"bank",
+								"payment",
+								"counter"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Audit Trailing",
+			"item": [
+				{
+					"name": "View audit trail",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseURL}}/api/admin/audit-trail",
+							"host": [
+								"{{baseURL}}"
+							],
+							"path": [
+								"api",
+								"admin",
+								"audit-trail"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"packages": {},
+				"requests": {},
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"packages": {},
+				"requests": {},
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "baseURL",
+			"value": ""
+		},
+		{
+			"key": "local_baseURL",
+			"value": ""
+		}
+	]
+}

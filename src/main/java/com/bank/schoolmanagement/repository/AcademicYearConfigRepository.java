@@ -16,7 +16,7 @@ public interface AcademicYearConfigRepository extends JpaRepository<AcademicYear
     /**
      * Find configuration by school and academic year
      */
-    Optional<AcademicYearConfig> findBySchoolAndAcademicYear(School school, String academicYear);
+    Optional<AcademicYearConfig> findBySchoolAndYear(School school, Integer year);
     
     /**
      * Find all configurations for a school
